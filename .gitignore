@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+vendor/
+.pnpm-store/
+
+# Build artifacts
+build/
+dist/
+public/
+lector
+*.exe
+frontend/.svelte-kit/
+frontend/build/
+
+# Databases and Data
+*.db
+*.db-journal
+lector.db*
+data/
+uploads/
+exports/
+temp/
+**/.direnv/
+
+# Environment and Secrets
+.env
+.env.*
+!.env.example
+.envrc
+/**/.direnv/
+lector_cookies.txt
+
+# OS and IDE files
+.DS_Store
+.vscode/
+.idea/
+
+
+*.test
+*.out
+coverage.html
+
+# Nix build symlinks
+result
+result-*

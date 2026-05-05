@@ -1,0 +1,29 @@
+# Exclude all local data and databases
+*.db*
+data/
+uploads/
+exports/
+temp/
+lector_cookies.txt
+
+# Exclude local dependencies
+node_modules/
+frontend/node_modules/
+vendor/
+
+# Exclude build artifacts
+public/
+lector
+frontend/build/
+frontend/.svelte-kit/
+
+# Exclude git and config
+.git/
+.env*
+.envrc
+.direnv/
+flake.lock
+docker/
+Dockerfile
+.dockerignore
+README.md

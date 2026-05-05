@@ -1,0 +1,25 @@
+services:
+  lector:
+    container_name: lector
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_PATH=/app/data/lector.db
+      - PORT=3000
+      - DOWNLOAD_WORKERS=10
+      - MAX_UPLOAD_SIZE=100
+      - CORS_ALLOW_ORIGINS=*
+    volumes:
+      - lector_data:/app/data
+      - lector_uploads:/app/uploads
+      - lector_exports:/app/exports
+      - ../plugins:/app/plugins
+    restart: unless-stopped
+
+volumes:
+  lector_data:
+  lector_uploads:
+  lector_exports:
