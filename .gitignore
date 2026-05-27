@@ -8,7 +8,7 @@ build/
 dist/
 public/
 plugins/
-lector
+/lector
 *.exe
 frontend/.svelte-kit/
 frontend/build/
