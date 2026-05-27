@@ -4,8 +4,9 @@ go 1.26.2
 
 require (
 	github.com/PuerkitoBio/goquery v1.12.0
-	github.com/bmaupin/go-epub v1.1.0
+	github.com/go-shiori/go-epub v1.2.1
 	github.com/gofiber/fiber/v2 v2.52.13
+	github.com/jung-kurt/gofpdf/v2 v2.17.3
 	github.com/yuin/gopher-lua v1.1.2
 	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.31.1
@@ -14,12 +15,11 @@ require (
 require (
 	github.com/andybalholm/brotli v1.1.0 // indirect
 	github.com/andybalholm/cascadia v1.3.3 // indirect
-	github.com/gabriel-vasile/mimetype v1.3.1 // indirect
-	github.com/gofrs/uuid v3.1.0+incompatible // indirect
+	github.com/gabriel-vasile/mimetype v1.4.3 // indirect
+	github.com/gofrs/uuid/v5 v5.0.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
-	github.com/jung-kurt/gofpdf/v2 v2.17.3 // indirect
 	github.com/klauspost/compress v1.17.9 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
@@ -29,7 +29,7 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.51.0 // indirect
 	github.com/valyala/tcplisten v1.0.0 // indirect
-	github.com/vincent-petithory/dataurl v0.0.0-20191104211930-d1553a71de50 // indirect
+	github.com/vincent-petithory/dataurl v1.0.0 // indirect
 	golang.org/x/net v0.52.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/text v0.35.0 // indirect

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Settings, Compass, Zap, ChevronRight } from 'lucide-svelte';
+	import { Settings, Compass, ChevronRight } from 'lucide-svelte';
 	import * as Icons from 'lucide-svelte';
 	import { clsx } from 'clsx';
 
@@ -27,13 +27,12 @@
 	interface Props {
 		plugins: Plugin[];
 		currentView: string;
-		currentPlugin: string;
 		currentTabId: string;
 		onNavigate: (view: string, plugin?: string, tabId?: string) => void;
 	}
 	let { plugins, currentView, currentTabId, onNavigate }: Props = $props();
 
-	let allSections = $derived(() => {
+	let allSections = $derived.by(() => {
 		const sections: Section[] = [];
 		plugins
 			.filter((p) => p.is_loaded)
@@ -48,8 +47,7 @@
 	});
 
 	function getIcon(name: string) {
-		// @ts-expect-error - dynamic icon indexing
-		return Icons[name] || Compass;
+		return (Icons as any)[name] || Compass;
 	}
 </script>
 
@@ -58,7 +56,7 @@
 		<span>Lector</span>
 	</div>
 
-	{#each allSections() as section (section.id)}
+	{#each allSections as section (section.id)}
 		<nav class="nav-section">
 			<header>{section.label}</header>
 			<div class="nav-list">

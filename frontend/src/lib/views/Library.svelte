@@ -20,7 +20,7 @@
 		onBatchMarkRead: (ids: number[], isRead: boolean) => void;
 	}
 	let {
-		documents,
+		documents = [],
 		groups,
 		onOpenDocument,
 		onCreateGroup,
@@ -37,6 +37,10 @@
 	let showArchived = $state(false);
 	let selectedIds = new SvelteSet<number>();
 	let fileInput: HTMLInputElement;
+
+	let filteredDocuments = $derived(
+		(documents || []).filter((n) => selectedGroupId === 0 || n.group_id === selectedGroupId)
+	);
 
 	function toggleSelect(id: number) {
 		if (selectedIds.has(id)) selectedIds.delete(id);
@@ -150,7 +154,7 @@
 	{/snippet}
 
 	<div class="grid">
-		{#each documents.filter((n) => selectedGroupId === 0 || n.group_id === selectedGroupId) as document (document.id)}
+		{#each filteredDocuments as document (document.id)}
 			<div
 				class={clsx(
 					'card-wrapper',

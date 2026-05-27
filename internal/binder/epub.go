@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/bmaupin/go-epub"
+	"github.com/go-shiori/go-epub"
 	"github.com/user/lector/internal/models"
 )
 
@@ -25,7 +25,10 @@ func BindEPUB(doc *models.Document, outputPath string) error {
 }
 
 func (b *EPUBBinder) Bind(doc models.Document, outputPath string) error {
-	e := epub.NewEpub(doc.Title)
+	e, err := epub.NewEpub(doc.Title)
+	if err != nil {
+		return fmt.Errorf("failed to create epub: %v", err)
+	}
 	e.SetAuthor(doc.Author)
 
 	for _, chapter := range doc.Chapters {

@@ -30,8 +30,8 @@
 	let documents = $state<Document[]>([]);
 	let history = $state<Document[]>([]);
 	let view = $state('library');
-	let currentPlugin = $state('');
-	let currentTabId = $state('');
+	let currentPlugin = $state('system');
+	let currentTabId = $state('sys:library');
 	let loading = $state(false);
 	let sidebarOpen = $state(false);
 
@@ -58,14 +58,14 @@
 		const manifest = await api.getPluginsManifest();
 		plugins = [baseManifest, ...manifest];
 		sources = plugins.flatMap((p) => (p.name !== 'system' && p.is_loaded ? [p.name] : []));
-
-		if (view === 'library' && currentTabId === '') {
-			const firstTab = plugins[0]?.tabs[0];
-			if (firstTab) {
-				handleNavigate(firstTab.component || 'explorer', plugins[0].name, firstTab.id);
-			}
-		}
 	}
+
+	$effect(() => {
+		if (view === 'library') {
+			refreshDocuments();
+			refreshGroups();
+		}
+	});
 
 	$effect(() => {
 		if (view === 'plugins') {
@@ -73,13 +73,16 @@
 		}
 	});
 	async function refreshGroups() {
-		groups = await api.getGroups();
+		const res = await api.getGroups();
+		groups = res || [];
 	}
 	async function refreshDocuments(archived: boolean = false) {
-		documents = await api.getDocuments(archived);
+		const res = await api.getDocuments(archived);
+		documents = res || [];
 	}
 	async function refreshHistory() {
-		history = await api.getHistory();
+		const res = await api.getHistory();
+		history = res || [];
 	}
 
 	async function handleCreateGroup() {
@@ -127,7 +130,11 @@
 		currentTabId = tabId || '';
 		view = targetView;
 
-		if (view === 'history') {
+		if (targetView === 'library') {
+			currentPlugin = 'system';
+			currentTabId = 'sys:library';
+			await refreshDocuments();
+		} else if (targetView === 'history') {
 			loading = true;
 			try {
 				await refreshHistory();
@@ -136,7 +143,7 @@
 			}
 		}
 
-		if (plugin && plugin !== 'system' && view === 'plugin') {
+		if (plugin && plugin !== 'system' && targetView === 'plugin') {
 			loading = true;
 			try {
 				const [pop, lat] = await Promise.all([
@@ -150,7 +157,6 @@
 			}
 		}
 	}
-
 	async function handleSearch(q: string, source: string) {
 		loading = true;
 		try {
@@ -224,13 +230,7 @@
 				onclick={() => (sidebarOpen = false)}
 				aria-label="Close sidebar"
 			></button>
-			<Sidebar
-				{plugins}
-				currentView={view}
-				{currentPlugin}
-				{currentTabId}
-				onNavigate={handleNavigate}
-			/>
+			<Sidebar {plugins} currentView={view} {currentTabId} onNavigate={handleNavigate} />
 		</div>
 	{/if}
 
@@ -241,81 +241,83 @@
 			view !== 'reader' && 'with-mobile-header'
 		)}
 	>
-		{#if view === 'library'}
-			<Library
-				{documents}
-				{groups}
-				onOpenDocument={(n) => handleSelectDocument(n.url, n.source)}
-				onCreateGroup={handleCreateGroup}
-				onUpload={handleUpload}
-				onRefresh={refreshDocuments}
-				onBatchDelete={handleBatchDelete}
-				onBatchMove={handleBatchMove}
-				onBatchArchive={handleBatchArchive}
-				onBatchMarkRead={handleBatchMarkRead}
-			/>
-		{:else if view === 'history'}
-			<History {history} onOpenDocument={(n) => handleSelectDocument(n.url, n.source)} />
-		{:else if view === 'search'}
-			<Search
-				{sources}
-				results={searchItems}
-				{loading}
-				onSearch={handleSearch}
-				onSelect={handleSelectDocument}
-			/>
-		{:else if view === 'plugins'}
-			<PluginsView
-				plugins={plugins.filter((p) => p.name !== 'system')}
-				onRefresh={refreshPlugins}
-			/>
-		{:else if view === 'explorer'}
-			<Explorer
-				pluginName={currentPlugin}
-				tabId={currentTabId}
-				onSelectDocument={handleSelectDocument}
-			/>
-		{:else if view === 'dynamic'}
-			<DynamicView pluginName={currentPlugin} tabId={currentTabId} />
-		{:else if view === 'plugin'}
-			<PluginExplorer
-				name={currentPlugin}
-				popular={popularResults}
-				latest={latestResults}
-				{loading}
-				onSelect={handleSelectDocument}
-			/>
-		{:else if view === 'detail' && activeDocument}
-			<Detail
-				bind:document={activeDocument}
-				{sources}
-				onToggleLibrary={handleToggleLibrary}
-				onReadChapter={handleReadChapter}
-				onClose={() => (view = 'library')}
-				pluginManifests={plugins}
-			/>
-		{:else if view === 'settings'}
-			<Settings {sources} onRefreshSources={refreshPlugins} />
-		{:else if view === 'reader' && activeChapter && activeDocument}
-			<Reader
-				chapter={activeChapter}
-				document={activeDocument}
-				onReadChapter={handleReadChapter}
-				onClose={async () => {
-					view = 'detail';
-					if (activeDocument) {
-						await Promise.all([
-							refreshDocuments(),
-							handleSelectDocument(activeDocument.url, activeDocument.source)
-						]);
-					}
-				}}
-			/>
-		{:else}
-			<div class="empty-view">
-				<p>Select a workspace item to begin</p>
-			</div>
-		{/if}
+		{#key view}
+			{#if view === 'library'}
+				<Library
+					{documents}
+					{groups}
+					onOpenDocument={(n) => handleSelectDocument(n.url, n.source)}
+					onCreateGroup={handleCreateGroup}
+					onUpload={handleUpload}
+					onRefresh={refreshDocuments}
+					onBatchDelete={handleBatchDelete}
+					onBatchMove={handleBatchMove}
+					onBatchArchive={handleBatchArchive}
+					onBatchMarkRead={handleBatchMarkRead}
+				/>
+			{:else if view === 'history'}
+				<History {history} onOpenDocument={(n) => handleSelectDocument(n.url, n.source)} />
+			{:else if view === 'search'}
+				<Search
+					{sources}
+					results={searchItems}
+					{loading}
+					onSearch={handleSearch}
+					onSelect={handleSelectDocument}
+				/>
+			{:else if view === 'plugins'}
+				<PluginsView
+					plugins={plugins.filter((p) => p.name !== 'system')}
+					onRefresh={refreshPlugins}
+				/>
+			{:else if view === 'explorer'}
+				<Explorer
+					pluginName={currentPlugin}
+					tabId={currentTabId}
+					onSelectDocument={handleSelectDocument}
+				/>
+			{:else if view === 'dynamic'}
+				<DynamicView pluginName={currentPlugin} tabId={currentTabId} />
+			{:else if view === 'plugin'}
+				<PluginExplorer
+					name={currentPlugin}
+					popular={popularResults}
+					latest={latestResults}
+					{loading}
+					onSelect={handleSelectDocument}
+				/>
+			{:else if view === 'detail' && activeDocument}
+				<Detail
+					bind:document={activeDocument}
+					{sources}
+					onToggleLibrary={handleToggleLibrary}
+					onReadChapter={handleReadChapter}
+					onClose={() => handleNavigate('library')}
+					pluginManifests={plugins}
+				/>
+			{:else if view === 'settings'}
+				<Settings {sources} onRefreshSources={refreshPlugins} />
+			{:else if view === 'reader' && activeChapter && activeDocument}
+				<Reader
+					chapter={activeChapter}
+					document={activeDocument}
+					onReadChapter={handleReadChapter}
+					onClose={async () => {
+						view = 'detail';
+						if (activeDocument) {
+							await Promise.all([
+								refreshDocuments(),
+								handleSelectDocument(activeDocument.url, activeDocument.source)
+							]);
+						}
+					}}
+				/>
+			{:else}
+				<div class="empty-view">
+					<p>Select a workspace item to begin</p>
+				</div>
+			{/if}
+		{/key}
 	</main>
 
 	{#if loading}
@@ -506,7 +508,6 @@
 		}
 	}
 
-	.modal-form p,
 	.modal-confirm p {
 		color: var(--text-muted);
 		margin-bottom: 1.5rem;
