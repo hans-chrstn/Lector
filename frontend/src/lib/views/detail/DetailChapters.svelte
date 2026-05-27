@@ -17,10 +17,50 @@
 
 	let markMode = $state(false);
 	let selectedIds = new SvelteSet<number>();
+	let lastSelectedId = $state<number | null>(null);
 
 	function toggleSelect(id: number) {
-		if (selectedIds.has(id)) selectedIds.delete(id);
-		else selectedIds.add(id);
+		if (selectedIds.has(id)) {
+			selectedIds.delete(id);
+			if (lastSelectedId === id) lastSelectedId = null;
+		} else {
+			selectedIds.add(id);
+			lastSelectedId = id;
+		}
+	}
+
+	function selectTop() {
+		const targetId = lastSelectedId || Array.from(selectedIds)[0];
+		if (!targetId) return;
+		const idx = chapters.findIndex((c) => c.id === targetId);
+		if (idx === -1) return;
+		for (let i = 0; i <= idx; i++) {
+			selectedIds.add(chapters[i].id);
+		}
+	}
+
+	function selectBottom() {
+		const targetId = lastSelectedId || Array.from(selectedIds)[selectedIds.size - 1];
+		if (!targetId) return;
+		const idx = chapters.findIndex((c) => c.id === targetId);
+		if (idx === -1) return;
+		for (let i = idx; i < chapters.length; i++) {
+			selectedIds.add(chapters[i].id);
+		}
+	}
+
+	function selectBetween() {
+		const ids = Array.from(selectedIds).sort((a, b) => {
+			const idxA = chapters.findIndex((c) => c.id === a);
+			const idxB = chapters.findIndex((c) => c.id === b);
+			return idxA - idxB;
+		});
+		if (ids.length < 2) return;
+		const startIdx = chapters.findIndex((c) => c.id === ids[0]);
+		const endIdx = chapters.findIndex((c) => c.id === ids[ids.length - 1]);
+		for (let i = startIdx; i <= endIdx; i++) {
+			selectedIds.add(chapters[i].id);
+		}
 	}
 
 	function selectAll() {
@@ -70,6 +110,9 @@
 		totalCount={chapters.length}
 		onAction={runBatch}
 		onSelectAll={selectAll}
+		onSelectBetween={selectBetween}
+		onSelectTop={selectTop}
+		onSelectBottom={selectBottom}
 	/>
 </div>
 

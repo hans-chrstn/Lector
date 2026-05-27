@@ -22,7 +22,8 @@
 		'chapter-row',
 		isCurrent && 'current',
 		isSelected && 'selected',
-		isMarking && 'marking'
+		isMarking && 'marking',
+		chapter.is_read && 'read'
 	)}
 	onclick={() => (isMarking ? onToggleSelect(chapter.id) : onRead(chapter))}
 >
@@ -44,14 +45,13 @@
 	<div class="ch-status">
 		{#if chapter.status === 'syncing'}
 			<Loader2 size={16} class="spin" />
-		{:else if chapter.is_read}
-			<CheckCircle2 size={16} class="text-success" />
 		{/if}
 	</div>
 </div>
 
 <style>
 	.chapter-row {
+		position: relative;
 		display: flex;
 		align-items: center;
 		padding: 0.875rem 1.25rem;
@@ -63,7 +63,7 @@
 		transition: all 0.2s ease;
 	}
 	.chapter-row:hover {
-		border-color: var(--primary);
+		border-color: var(--border-bright);
 		background: var(--bg-surface-hover);
 		transform: translateX(4px);
 	}
@@ -74,6 +74,12 @@
 	.chapter-row.selected {
 		border-color: var(--primary);
 		background: rgba(var(--primary-rgb), 0.1);
+	}
+	.chapter-row.read {
+		opacity: 0.5;
+	}
+	.chapter-row.read .ch-title {
+		color: var(--text-dim);
 	}
 	.selection-indicator {
 		color: var(--text-dim);
@@ -98,8 +104,9 @@
 		font-weight: 600;
 		color: var(--text-main);
 	}
-	.text-success {
-		color: #10b981;
+	.ch-status {
+		display: flex;
+		align-items: center;
 	}
 	.spin {
 		animation: spin 1s linear infinite;

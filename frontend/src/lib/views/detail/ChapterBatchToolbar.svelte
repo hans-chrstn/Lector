@@ -6,9 +6,20 @@
 		totalCount: number;
 		onAction: (isRead: boolean) => void;
 		onSelectAll: () => void;
+		onSelectBetween: () => void;
+		onSelectTop: () => void;
+		onSelectBottom: () => void;
 	}
 
-	let { selectedCount, totalCount, onAction, onSelectAll }: Props = $props();
+	let {
+		selectedCount,
+		totalCount,
+		onAction,
+		onSelectAll,
+		onSelectBetween,
+		onSelectTop,
+		onSelectBottom
+	}: Props = $props();
 </script>
 
 <div class="batch-toolbar" class:visible={selectedCount > 0}>
@@ -21,6 +32,20 @@
 			{/if}
 			<span>{selectedCount} Selected</span>
 		</button>
+
+		<div class="divider"></div>
+
+		<div class="select-options">
+			<button class="action-btn" onclick={onSelectTop}>
+				<span>Top</span>
+			</button>
+			<button class="action-btn" onclick={onSelectBetween} disabled={selectedCount < 2}>
+				<span>Between</span>
+			</button>
+			<button class="action-btn" onclick={onSelectBottom}>
+				<span>Bottom</span>
+			</button>
+		</div>
 
 		<div class="divider"></div>
 
@@ -80,6 +105,10 @@
 		height: 20px;
 		background: var(--border-main);
 	}
+	.select-options {
+		display: flex;
+		gap: 0.25rem;
+	}
 	.actions {
 		display: flex;
 		gap: 0.5rem;
@@ -98,8 +127,12 @@
 		cursor: pointer;
 		transition: all 0.2s;
 	}
-	.action-btn:hover {
+	.action-btn:hover:not(:disabled) {
 		background: rgba(128, 128, 128, 0.1);
 		color: var(--text-main);
+	}
+	.action-btn:disabled {
+		opacity: 0.3;
+		cursor: not-allowed;
 	}
 </style>

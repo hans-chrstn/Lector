@@ -63,7 +63,9 @@
 		width: 100%;
 		height: 100%;
 		object-fit: cover;
-		transition: transform 0.4s ease;
+		object-position: center top;
+		transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+		image-rendering: -webkit-optimize-contrast;
 	}
 
 	.overlay-layer {

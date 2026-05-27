@@ -18,7 +18,13 @@
 
 <BaseGridItem {onclick}>
 	{#snippet media()}
-		<img src={api.getProxyImage(cover_url) || '/placeholder.png'} alt={title} loading="lazy" />
+		<img
+			src={api.getProxyImage(cover_url) || '/placeholder.png'}
+			alt={title}
+			{title}
+			loading="lazy"
+			decoding="async"
+		/>
 	{/snippet}
 
 	{#snippet overlay()}
