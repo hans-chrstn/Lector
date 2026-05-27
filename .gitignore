@@ -7,7 +7,7 @@ vendor/
 build/
 dist/
 public/
-plugins/
+plugins/**/*.lua
 /lector
 *.exe
 frontend/.svelte-kit/
