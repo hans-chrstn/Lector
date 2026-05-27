@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { api } from '$lib/services/api';
 	import BaseListItem from './base/BaseListItem.svelte';
 	import ProgressRing from './ProgressRing.svelte';
+	import CoverImage from './CoverImage.svelte';
 	import { FileText, Globe } from 'lucide-svelte';
 
 	interface Props {
@@ -28,7 +28,7 @@
 
 <BaseListItem {onclick}>
 	{#snippet media()}
-		<img src={api.getProxyImage(cover_url) || '/placeholder.png'} alt={title} loading="lazy" />
+		<CoverImage src={cover_url} alt={title} />
 	{/snippet}
 
 	{#snippet content()}

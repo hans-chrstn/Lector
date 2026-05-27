@@ -30,6 +30,7 @@
 	let documents = $state<Document[]>([]);
 	let history = $state<Document[]>([]);
 	let view = $state('library');
+	let originNav = $state({ view: 'library', plugin: 'system', tabId: 'sys:library' });
 	let currentPlugin = $state('system');
 	let currentTabId = $state('sys:library');
 	let loading = $state(false);
@@ -126,6 +127,15 @@
 
 	async function handleNavigate(targetView: string, plugin?: string, tabId?: string) {
 		sidebarOpen = false;
+
+		if (targetView !== 'detail' && targetView !== 'reader') {
+			originNav = {
+				view: targetView,
+				plugin: plugin || currentPlugin,
+				tabId: tabId || currentTabId
+			};
+		}
+
 		currentPlugin = plugin || '';
 		currentTabId = tabId || '';
 		view = targetView;
@@ -170,6 +180,9 @@
 		loading = true;
 		try {
 			activeDocument = await api.ensureDocument(url, source);
+			if (view !== 'detail' && view !== 'reader') {
+				originNav = { view, plugin: currentPlugin, tabId: currentTabId };
+			}
 			view = 'detail';
 		} finally {
 			loading = false;
@@ -201,6 +214,9 @@
 			const document = await api.uploadBook(file);
 			if (document) {
 				activeDocument = document;
+				if (view !== 'detail' && view !== 'reader') {
+					originNav = { view, plugin: currentPlugin, tabId: currentTabId };
+				}
 				view = 'detail';
 				await refreshDocuments();
 			}
@@ -292,7 +308,12 @@
 					{sources}
 					onToggleLibrary={handleToggleLibrary}
 					onReadChapter={handleReadChapter}
-					onClose={() => handleNavigate('library')}
+					onClose={() => handleNavigate(originNav.view, originNav.plugin, originNav.tabId)}
+					backLabel={originNav.view === 'library'
+						? 'Back to collection'
+						: originNav.plugin !== 'system'
+							? `Back to ${originNav.plugin}`
+							: `Back to ${originNav.view}`}
 					pluginManifests={plugins}
 				/>
 			{:else if view === 'settings'}

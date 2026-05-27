@@ -7,12 +7,12 @@
 		User,
 		BookOpen,
 		Tag,
-		Zap,
-		Camera
+		Zap
 	} from 'lucide-svelte';
 	import * as Icons from 'lucide-svelte';
 	import { clsx } from 'clsx';
-	import { api, type Document } from '$lib/services/api';
+	import type { Document } from '$lib/services/api';
+	import CoverImage from '../../components/CoverImage.svelte';
 
 	interface Props {
 		document: Document;
@@ -39,25 +39,12 @@
 	}: Props = $props();
 
 	let coverInput: HTMLInputElement;
-	let imgError = $state(false);
 </script>
 
 <div class="hero">
 	<div class="cover-section">
 		<button class="cover-wrapper" onclick={() => coverInput.click()} title="Change Cover">
-			{#if document.cover_url && !imgError}
-				<img
-					src={api.getProxyImage(document.cover_url)}
-					alt={document.title}
-					class="cover"
-					onerror={() => (imgError = true)}
-				/>
-			{:else}
-				<div class="cover-placeholder">
-					<Camera size={40} />
-					<span>Upload Cover</span>
-				</div>
-			{/if}
+			<CoverImage src={document.cover_url} alt={document.title} isHero={true} />
 			<div class="cover-overlay">
 				<Edit3 size={24} />
 			</div>
@@ -173,23 +160,6 @@
 		background: var(--bg-surface);
 		cursor: pointer;
 		padding: 0;
-	}
-
-	.cover {
-		width: 100%;
-		height: 100%;
-		object-fit: cover;
-	}
-
-	.cover-placeholder {
-		width: 100%;
-		height: 100%;
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: 1rem;
-		color: var(--text-dim);
 	}
 
 	.cover-overlay {

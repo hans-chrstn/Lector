@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { api } from '$lib/services/api';
 	import BaseGridItem from './base/BaseGridItem.svelte';
 	import ProgressRing from './ProgressRing.svelte';
+	import CoverImage from './CoverImage.svelte';
 
 	interface Props {
 		title: string;
@@ -18,13 +18,7 @@
 
 <BaseGridItem {onclick}>
 	{#snippet media()}
-		<img
-			src={api.getProxyImage(cover_url) || '/placeholder.png'}
-			alt={title}
-			{title}
-			loading="lazy"
-			decoding="async"
-		/>
+		<CoverImage src={cover_url} alt={title} />
 	{/snippet}
 
 	{#snippet overlay()}

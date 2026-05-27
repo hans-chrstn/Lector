@@ -20,6 +20,7 @@
 		onToggleLibrary: () => void;
 		onReadChapter: (chapter: Chapter) => void;
 		onClose: () => void;
+		backLabel?: string;
 		pluginManifests?: PluginManifest[];
 	}
 
@@ -29,8 +30,13 @@
 		onToggleLibrary,
 		onReadChapter,
 		onClose,
+		backLabel = 'Back to collection',
 		pluginManifests = []
 	}: Props = $props();
+
+	function capitalize(s: string) {
+		return s.charAt(0).toUpperCase() + s.slice(1);
+	}
 
 	let dynamicActions = $state<any[]>([]);
 	let progress = $state<any>(null);
@@ -184,7 +190,7 @@
 <div class="detail-container">
 	<button class="back-link" onclick={onClose}>
 		<ArrowLeft size={18} />
-		<span>Back to collection</span>
+		<span>{capitalize(backLabel)}</span>
 	</button>
 
 	<DetailHero
