@@ -34,6 +34,8 @@
 		"vite": "^8.0.7"
 	},
 	"dependencies": {
+		"@fontsource/geist-mono": "^5.2.8",
+		"@fontsource/geist-sans": "^5.2.5",
 		"clsx": "^2.1.1",
 		"lucide-svelte": "^1.0.1",
 		"tailwind-merge": "^3.5.0"

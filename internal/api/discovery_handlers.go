@@ -13,10 +13,19 @@ import (
 func (h *API) Search(c *fiber.Ctx) error {
 	plugin, query := c.Query("plugin"), c.Query("q")
 	if plugin == "all" {
-		var all []models.SearchItem
-		for _, s := range h.Plugins {
+		var all []map[string]interface{}
+		for name, s := range h.Plugins {
 			res, _ := s.Search(query)
-			all = append(all, res...)
+			for _, item := range res {
+				m := map[string]interface{}{
+					"title":     item.Title,
+					"url":       item.URL,
+					"cover_url": item.CoverURL,
+					"info":      item.Info,
+					"source":    name,
+				}
+				all = append(all, m)
+			}
 		}
 		return c.JSON(all)
 	}

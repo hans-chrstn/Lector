@@ -16,7 +16,7 @@ type Chapter struct {
 	Title      string `json:"title"`
 	URL        string `gorm:"index:idx_doc_url,unique" json:"url"`
 	Content    string `json:"content"`
-	Order      int    `json:"order"`
+	Order      int    `gorm:"type:integer;index" json:"order"`
 	Status     string `json:"status"`
 	IsRead     bool   `gorm:"default:false" json:"is_read"`
 }

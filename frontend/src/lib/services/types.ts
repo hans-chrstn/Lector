@@ -35,6 +35,7 @@ export interface Document {
 	group_id: number;
 	chapters: Chapter[];
 	read_chapters: number;
+	total_chapters: number;
 }
 
 export interface Group {

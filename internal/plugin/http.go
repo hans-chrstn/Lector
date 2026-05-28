@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -19,7 +18,6 @@ var (
 		Transport: GlobalTransport,
 		Timeout:   30 * time.Second,
 	}
-	HTTPMu sync.Mutex
 )
 
 func (s *LuaPlugin) Fetch(method, u, postData, referer string, isAjax bool) string {
@@ -47,9 +45,7 @@ func (s *LuaPlugin) Fetch(method, u, postData, referer string, isAjax bool) stri
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}
 
-	HTTPMu.Lock()
 	resp, err := HTTPClient.Do(req)
-	HTTPMu.Unlock()
 
 	if err != nil {
 		return ""

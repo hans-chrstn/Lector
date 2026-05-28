@@ -27,7 +27,7 @@
 				meta={document.source}
 				is_local={document.is_local}
 				read_chapters={document.read_chapters}
-				total_chapters={document.chapters?.length || 0}
+				total_chapters={document.total_chapters}
 				onclick={() => onOpenDocument(document)}
 			/>
 		{:else}

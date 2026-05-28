@@ -73,12 +73,10 @@
 				<User size={16} />
 				<span>{document.author || 'Unknown Author'}</span>
 			</div>
-			{#if document.chapters}
-				<div class="meta-item">
-					<BookOpen size={16} />
-					<span>{document.chapters.length} Chapters</span>
-				</div>
-			{/if}
+			<div class="meta-item">
+				<BookOpen size={16} />
+				<span>{document.total_chapters || document.chapters?.length || 0} Chapters</span>
+			</div>
 			<div class="meta-item">
 				<Tag size={16} />
 				<span class="genres">{document.genres || 'No genres listed'}</span>

@@ -14,23 +14,32 @@ import (
 )
 
 func (h *API) GetActivePlugins(c *fiber.Ctx) error {
+	return c.JSON(h.GetActivePluginNames())
+}
+
+func (h *API) GetActivePluginNames() []string {
 	var n []string
 	for name := range h.Plugins {
 		n = append(n, name)
 	}
-	return c.JSON(n)
+	return n
 }
 
 func (h *API) GetDocuments(c *fiber.Ctx) error {
 	showArchived := c.Query("archived") == "true"
-	docs, err := h.DocumentService.GetAllInLibrary(showArchived)
+	var docs []models.Document
+	err := db.DB.Where("is_in_library = ? AND is_archived = ?", true, showArchived).Find(&docs).Error
 	if err != nil {
 		return c.Status(500).SendString(err.Error())
 	}
 	for i := range docs {
-		var count int64
-		db.DB.Model(&models.Chapter{}).Where("document_id = ? AND is_read = ?", docs[i].ID, true).Count(&count)
-		docs[i].ReadChapters = int(count)
+		var readCount int64
+		db.DB.Model(&models.Chapter{}).Where("document_id = ? AND is_read = ?", docs[i].ID, true).Count(&readCount)
+		docs[i].ReadChapters = int(readCount)
+
+		var totalCount int64
+		db.DB.Model(&models.Chapter{}).Where("document_id = ?", docs[i].ID).Count(&totalCount)
+		docs[i].TotalChapters = int(totalCount)
 	}
 	return c.JSON(docs)
 }
@@ -64,7 +73,7 @@ func (h *API) EnsureDocument(c *fiber.Ctx) error {
 		fetched.Source = plugin
 		chapters := fetched.Chapters
 		fetched.Chapters = nil
-		if err := db.DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&fetched).Error; err != nil {
+		if err := db.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&fetched).Error; err != nil {
 			return c.Status(500).SendString("Failed to save document")
 		}
 		doc = &fetched
@@ -73,7 +82,7 @@ func (h *API) EnsureDocument(c *fiber.Ctx) error {
 			chapters[i].ID = 0
 			chapters[i].Order = i + 1
 		}
-		db.DB.Clauses(clause.OnConflict{DoNothing: true}).CreateInBatches(chapters, 250)
+		db.DB.Clauses(clause.OnConflict{UpdateAll: true}).CreateInBatches(chapters, 250)
 	} else {
 		var count int64
 		db.DB.Model(&models.Chapter{}).Where("document_id = ?", doc.ID).Count(&count)
@@ -85,19 +94,25 @@ func (h *API) EnsureDocument(c *fiber.Ctx) error {
 				s, ok := h.Plugins[plugin]
 				if ok {
 					fetched, _ := s.GetDocument(url)
+
+					doc.CoverURL = fetched.CoverURL
+					doc.Author = fetched.Author
+					doc.Synopsis = fetched.Synopsis
+					db.DB.Save(doc)
+
 					for i := range fetched.Chapters {
 						fetched.Chapters[i].DocumentID = doc.ID
 						fetched.Chapters[i].ID = 0
 						fetched.Chapters[i].Order = i + 1
 					}
-					db.DB.Clauses(clause.OnConflict{DoNothing: true}).CreateInBatches(fetched.Chapters, 250)
+					db.DB.Clauses(clause.OnConflict{UpdateAll: true}).CreateInBatches(fetched.Chapters, 250)
 				}
 			}
 		}
 	}
 
 	db.DB.Preload("Chapters", func(db *gorm.DB) *gorm.DB {
-		return db.Order("`order` ASC")
+		return db.Order("CAST(\"order\" AS INTEGER) ASC")
 	}).First(doc, doc.ID)
 
 	var count int64
@@ -114,7 +129,9 @@ func (h *API) GetDocumentByID(c *fiber.Ctx) error {
 		return c.Status(404).SendString("Document not found")
 	}
 
-	db.DB.Model(doc).Association("Chapters").Find(&doc.Chapters)
+	db.DB.Preload("Chapters", func(db *gorm.DB) *gorm.DB {
+		return db.Order("CAST(\"order\" AS INTEGER) ASC")
+	}).First(doc, doc.ID)
 
 	var count int64
 	db.DB.Model(&models.Chapter{}).Where("document_id = ? AND is_read = ?", doc.ID, true).Count(&count)
@@ -156,7 +173,10 @@ func (h *API) GetHistory(c *fiber.Ctx) error {
 		var count int64
 		db.DB.Model(&models.Chapter{}).Where("document_id = ? AND is_read = ?", docs[i].ID, true).Count(&count)
 		docs[i].ReadChapters = int(count)
-		db.DB.Model(&docs[i]).Association("Chapters").Find(&docs[i].Chapters)
+
+		var totalCount int64
+		db.DB.Model(&models.Chapter{}).Where("document_id = ?", docs[i].ID).Count(&totalCount)
+		docs[i].TotalChapters = int(totalCount)
 	}
 
 	return c.JSON(docs)

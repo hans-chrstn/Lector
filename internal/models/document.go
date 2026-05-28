@@ -28,7 +28,8 @@ type Document struct {
 	GroupID     uint      `gorm:"index" json:"group_id"`
 	Chapters    []Chapter `gorm:"foreignKey:DocumentID" json:"chapters"`
 
-	ReadChapters int `gorm:"-" json:"read_chapters"`
+	ReadChapters  int `gorm:"-" json:"read_chapters"`
+	TotalChapters int `gorm:"-" json:"total_chapters"`
 }
 
 type SearchItem struct {

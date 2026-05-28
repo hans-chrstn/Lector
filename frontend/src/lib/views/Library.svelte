@@ -183,7 +183,7 @@
 					cover_url={document.cover_url}
 					meta={document.source}
 					read_chapters={document.read_chapters}
-					total_chapters={document.chapters?.length || 0}
+					total_chapters={document.total_chapters}
 					onclick={() => !markMode && onOpenDocument(document)}
 				/>
 				{#if markMode}

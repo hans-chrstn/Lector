@@ -109,9 +109,9 @@ func (h *API) GetPluginsManifest(c *fiber.Ctx) error {
 				if newS, err := plugin.NewLuaPlugin(path); err == nil {
 					newS.LoadedAt = info.ModTime()
 					h.Plugins[p.Name] = newS
-					fmt.Printf("[Plugin] %s: loaded version from %s\n", p.Name, newS.LoadedAt.Format("15:04:05"))
+					fmt.Printf("[Plugin] %s: reloaded from disk (ModTime: %s)\n", p.Name, newS.LoadedAt.Format("15:04:05"))
 				} else {
-					fmt.Printf("[Plugin] %s: load failed: %v\n", p.Name, err)
+					fmt.Printf("[Plugin] %s: reload failed: %v\n", p.Name, err)
 				}
 			}
 		} else {
@@ -186,6 +186,7 @@ func (h *API) PluginRPC(c *fiber.Ctx) error {
 
 	p, ok := h.Plugins[name]
 	if !ok {
+		fmt.Printf("[PluginRPC] Error: Plugin %s not found. Active: %v\n", name, h.GetActivePluginNames())
 		return c.Status(404).SendString("Plugin not found")
 	}
 
@@ -194,6 +195,20 @@ func (h *API) PluginRPC(c *fiber.Ctx) error {
 
 	fn := p.L.GetGlobal(method)
 	if fn.Type() != lua.LTFunction {
+		globals := p.L.Get(lua.GlobalsIndex).(*lua.LTable)
+		globals.ForEach(func(k, v lua.LValue) {
+			if strings.EqualFold(k.String(), method) && v.Type() == lua.LTFunction {
+				fn = v
+			}
+		})
+	}
+
+	if fn.Type() != lua.LTFunction {
+		if method == "get_document_actions" {
+			return c.JSON([]interface{}{})
+		}
+
+		fmt.Printf("[PluginRPC] Error: Method %s not found in plugin %s\n", method, name)
 		return c.Status(404).SendString(fmt.Sprintf("RPC method %s not found in plugin %s", method, name))
 	}
 
@@ -214,5 +229,40 @@ func (h *API) PluginRPC(c *fiber.Ctx) error {
 		return c.SendString(string(str))
 	}
 
-	return c.JSON(fiber.Map{"status": "success", "info": "RPC executed without returning a string"})
+	if tbl, ok := ret.(*lua.LTable); ok {
+		data := tableToMap(tbl)
+		return c.JSON(data)
+	}
+
+	return c.JSON(fiber.Map{"status": "success", "info": "RPC executed"})
+}
+
+func tableToMap(tbl *lua.LTable) interface{} {
+	if tbl.MaxN() > 0 {
+		arr := []interface{}{}
+		tbl.ForEach(func(k, v lua.LValue) {
+			arr = append(arr, luaValueToInterface(v))
+		})
+		return arr
+	}
+	res := make(map[string]interface{})
+	tbl.ForEach(func(k, v lua.LValue) {
+		res[k.String()] = luaValueToInterface(v)
+	})
+	return res
+}
+
+func luaValueToInterface(v lua.LValue) interface{} {
+	switch v.Type() {
+	case lua.LTString:
+		return v.String()
+	case lua.LTNumber:
+		return float64(v.(lua.LNumber))
+	case lua.LTBool:
+		return bool(v.(lua.LBool))
+	case lua.LTTable:
+		return tableToMap(v.(*lua.LTable))
+	default:
+		return nil
+	}
 }

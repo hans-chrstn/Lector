@@ -10,6 +10,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/user/lector/internal/binder"
 	"github.com/user/lector/internal/db"
+	"gorm.io/gorm"
 )
 
 func (h *API) ExportDocument(c *fiber.Ctx) error {
@@ -21,7 +22,9 @@ func (h *API) ExportDocument(c *fiber.Ctx) error {
 		return c.Status(404).SendString("Document not found")
 	}
 
-	db.DB.Model(doc).Association("Chapters").Find(&doc.Chapters)
+	db.DB.Preload("Chapters", func(db *gorm.DB) *gorm.DB {
+		return db.Order("`order` ASC")
+	}).First(doc, doc.ID)
 
 	ext := "epub"
 	if format == "pdf" {

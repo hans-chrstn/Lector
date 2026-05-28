@@ -29,9 +29,7 @@ func FetchRemoteMetadata(title, author string) *RemoteMetadata {
 		apiURL := fmt.Sprintf("https://www.googleapis.com/books/v1/volumes?q=%s&maxResults=1", url.QueryEscape(q))
 		req, _ := http.NewRequest("GET", apiURL, nil)
 
-		plugin.HTTPMu.Lock()
 		resp, err := plugin.HTTPClient.Do(req)
-		plugin.HTTPMu.Unlock()
 
 		if err != nil || resp.StatusCode != 200 {
 			return nil

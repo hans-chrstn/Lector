@@ -66,6 +66,7 @@
 		if (!document.id) return;
 		dynamicActions = [];
 		for (const p of pluginManifests) {
+			if (p.name === 'system' || !p.is_loaded) continue;
 			try {
 				const res = await fetch(
 					`${window.location.origin}/api/plugins/${p.name}/rpc/get_document_actions`,
@@ -81,7 +82,9 @@
 						dynamicActions = [...dynamicActions, ...actions.map((a) => ({ ...a, plugin: p.name }))];
 					}
 				}
-			} catch {}
+			} catch (e) {
+				console.error(`[Detail] Failed to fetch actions for plugin ${p.name}:`, e);
+			}
 		}
 	}
 

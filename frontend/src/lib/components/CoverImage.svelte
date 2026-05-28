@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { ImageOff, Camera } from 'lucide-svelte';
 	import { api } from '$lib/services/api';
 	import { clsx } from 'clsx';
@@ -14,28 +15,45 @@
 
 	let error = $state(false);
 	let loading = $state(true);
+	let previousSrc = $state('');
+	let imgEl = $state<HTMLImageElement>();
+
+	onMount(() => {
+		if (imgEl?.complete && imgEl.naturalWidth > 0) {
+			loading = false;
+		}
+	});
 
 	$effect(() => {
-		if (src) {
+		if (src !== previousSrc) {
+			previousSrc = src;
 			error = false;
 			loading = true;
 		}
 	});
+
+	function handleLoad() {
+		if (imgEl && imgEl.naturalWidth > 0) {
+			loading = false;
+		} else if (imgEl) {
+			error = true;
+			loading = false;
+		}
+	}
 </script>
 
 <div class={clsx('cover-container', className, isHero && 'hero-size')}>
 	{#if src && !error}
 		<img
+			bind:this={imgEl}
 			src={api.getProxyImage(src)}
 			{alt}
 			class={clsx('cover-img', !loading && 'loaded')}
-			onload={() => (loading = false)}
+			onload={handleLoad}
 			onerror={() => {
 				error = true;
 				loading = false;
 			}}
-			loading="lazy"
-			decoding="async"
 		/>
 	{/if}
 
