@@ -5,9 +5,12 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/basicauth"
 	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/user/lector/internal/api"
 	"github.com/user/lector/internal/db"
 	"github.com/user/lector/internal/models"
@@ -29,6 +32,35 @@ func main() {
 	app := fiber.New(fiber.Config{
 		BodyLimit: uploadLimitMB * 1024 * 1024,
 	})
+
+	app.Use(limiter.New(limiter.Config{
+		Max:        120,
+		Expiration: 1 * time.Minute,
+		KeyGenerator: func(c *fiber.Ctx) string {
+			return c.IP()
+		},
+	}))
+
+	authUser := os.Getenv("AUTH_USER")
+	authPass := os.Getenv("AUTH_PASSWORD")
+	if authUser != "" && authPass != "" {
+		app.Use(basicauth.New(basicauth.Config{
+			Users: map[string]string{
+				authUser: authPass,
+			},
+			Realm: "Lector Restricted Area",
+		}))
+	}
+
+	heavyLimiter := limiter.New(limiter.Config{
+		Max:        10,
+		Expiration: 1 * time.Minute,
+		LimitReached: func(c *fiber.Ctx) error {
+			return c.Status(429).SendString("Too many requests, please slow down.")
+		},
+	})
+	app.Use("/api/upload", heavyLimiter)
+	app.Use("/api/documents/*/export", heavyLimiter)
 
 	origins := os.Getenv("CORS_ALLOW_ORIGINS")
 	if origins == "" {

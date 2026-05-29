@@ -121,7 +121,8 @@ func processEPUB(path string) (*models.Document, error) {
 	for _, f := range r.File {
 		if f.Name == "META-INF/container.xml" {
 			rc, _ := f.Open()
-			content, _ := io.ReadAll(rc)
+			limitRC := io.LimitReader(rc, 1*1024*1024)
+			content, _ := io.ReadAll(limitRC)
 			rc.Close()
 			xmlStr := string(content)
 			opfPath = stringBetween(xmlStr, "full-path=\"", "\"")
@@ -140,7 +141,8 @@ func processEPUB(path string) (*models.Document, error) {
 	for _, f := range r.File {
 		if f.Name == opfPath {
 			rc, _ := f.Open()
-			opfContent, _ = io.ReadAll(rc)
+			limitRC := io.LimitReader(rc, 10*1024*1024)
+			opfContent, _ = io.ReadAll(limitRC)
 			rc.Close()
 			break
 		}
@@ -244,10 +246,11 @@ func processEPUB(path string) (*models.Document, error) {
 		for _, f := range r.File {
 			if filepath.ToSlash(f.Name) == fullCoverPath {
 				rc, _ := f.Open()
+				limitRC := io.LimitReader(rc, 20*1024*1024)
 				localCoverName := fmt.Sprintf("cover_%s%s", strings.ReplaceAll(filepath.Base(path), " ", "_"), filepath.Ext(f.Name))
 				localCoverPath := filepath.Join("uploads", localCoverName)
 				out, _ := os.Create(localCoverPath)
-				io.Copy(out, rc)
+				io.Copy(out, limitRC)
 				out.Close()
 				rc.Close()
 				document.CoverURL = "/uploads/" + localCoverName
@@ -282,7 +285,8 @@ func processEPUB(path string) (*models.Document, error) {
 			continue
 		}
 		rc, _ := targetFile.Open()
-		content, _ := io.ReadAll(rc)
+		limitRC := io.LimitReader(rc, 50*1024*1024)
+		content, _ := io.ReadAll(limitRC)
 		rc.Close()
 		cDoc, _ := goquery.NewDocumentFromReader(bytes.NewReader(content))
 		chTitle := strings.TrimSpace(cDoc.Find("title").First().Text())

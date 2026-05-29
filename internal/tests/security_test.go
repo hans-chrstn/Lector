@@ -10,8 +10,11 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/basicauth"
+	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/user/lector/internal/api"
 	"github.com/user/lector/internal/db"
 	"github.com/user/lector/internal/plugin"
@@ -24,6 +27,17 @@ func createMaliciousEPUB() ([]byte, error) {
 
 	f, _ := w.Create("../../../etc/passwd")
 	f.Write([]byte("malicious content"))
+
+	w.Close()
+	return buf.Bytes(), nil
+}
+
+func createLargeEPUB() ([]byte, error) {
+	buf := new(bytes.Buffer)
+	w := zip.NewWriter(buf)
+
+	f, _ := w.Create("META-INF/container.xml")
+	f.Write(make([]byte, 1024))
 
 	w.Close()
 	return buf.Bytes(), nil
@@ -102,6 +116,51 @@ func TestZipSlipProtection(t *testing.T) {
 		_, err := services.ProcessLocalFile(path)
 		if err == nil || !strings.Contains(err.Error(), "security: invalid file path") {
 			t.Errorf("Expected security error for Zip Slip, got: %v", err)
+		}
+	})
+}
+
+func TestBasicAuthSecurity(t *testing.T) {
+	app := fiber.New()
+	app.Use(basicauth.New(basicauth.Config{
+		Users: map[string]string{
+			"admin": "password123",
+		},
+	}))
+	app.Get("/test", func(c *fiber.Ctx) error { return c.SendString("OK") })
+
+	t.Run("Blocks Unauthorized", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/test", nil)
+		resp, _ := app.Test(req)
+		if resp.StatusCode != 401 {
+			t.Errorf("Expected 401, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("Allows Authorized", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.SetBasicAuth("admin", "password123")
+		resp, _ := app.Test(req)
+		if resp.StatusCode != 200 {
+			t.Errorf("Expected 200, got %d", resp.StatusCode)
+		}
+	})
+}
+
+func TestRateLimiting(t *testing.T) {
+	app := fiber.New()
+	app.Use(limiter.New(limiter.Config{
+		Max:        2,
+		Expiration: 1 * time.Second,
+	}))
+	app.Get("/test", func(c *fiber.Ctx) error { return c.SendString("OK") })
+
+	t.Run("Triggers Rate Limit", func(t *testing.T) {
+		app.Test(httptest.NewRequest("GET", "/test", nil))
+		app.Test(httptest.NewRequest("GET", "/test", nil))
+		resp, _ := app.Test(httptest.NewRequest("GET", "/test", nil))
+		if resp.StatusCode != 429 {
+			t.Errorf("Expected 429, got %d", resp.StatusCode)
 		}
 	})
 }

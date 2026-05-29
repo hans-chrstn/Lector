@@ -29,15 +29,22 @@ FROM alpine:latest
 
 RUN apk add --no-cache ca-certificates musl
 
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
 WORKDIR /app
 
-RUN mkdir -p /app/data /app/uploads /app/exports /app/plugins
+RUN mkdir -p /app/data /app/uploads /app/exports /app/plugins && \
+    chown -R appuser:appgroup /app/data /app/uploads /app/exports /app/plugins
 
 COPY --from=backend-builder /app/lector .
 
 COPY --from=frontend-builder /app/build ./public
 
 COPY plugins/ ./plugins/
+
+RUN chown -R appuser:appgroup /app/plugins
+
+USER appuser
 
 EXPOSE 3000
 
