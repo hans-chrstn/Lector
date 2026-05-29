@@ -9,6 +9,8 @@ import (
 
 func TestLuaEnvironment(t *testing.T) {
 	luaCode := `
+		app.enable_capability("ui")
+		app.add_section("test", "Test")
 		assert(type(app) == "table", "app global should be a table")
 		assert(type(net) == "table", "net global should be a table")
 		assert(type(doc) == "table", "doc global should be a table")

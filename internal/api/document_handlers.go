@@ -13,14 +13,12 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-func (h *API) GetActivePlugins(c *fiber.Ctx) error {
-	return c.JSON(h.GetActivePluginNames())
-}
-
 func (h *API) GetActivePluginNames() []string {
 	var n []string
-	for name := range h.Plugins {
-		n = append(n, name)
+	for name, p := range h.Plugins {
+		if p.HasCapability("catalog") {
+			n = append(n, name)
+		}
 	}
 	return n
 }
@@ -82,7 +80,12 @@ func (h *API) EnsureDocument(c *fiber.Ctx) error {
 			chapters[i].ID = 0
 			chapters[i].Order = i + 1
 		}
-		db.DB.Clauses(clause.OnConflict{UpdateAll: true}).CreateInBatches(chapters, 250)
+		if err := db.DB.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "document_id"}, {Name: "url"}},
+			DoUpdates: clause.AssignmentColumns([]string{"title", "order"}),
+		}).CreateInBatches(chapters, 100).Error; err != nil {
+			fmt.Printf("[API] Error creating chapters for %s: %v\n", doc.Title, err)
+		}
 	} else {
 		var count int64
 		db.DB.Model(&models.Chapter{}).Where("document_id = ?", doc.ID).Count(&count)
@@ -93,7 +96,10 @@ func (h *API) EnsureDocument(c *fiber.Ctx) error {
 			} else {
 				s, ok := h.Plugins[plugin]
 				if ok {
-					fetched, _ := s.GetDocument(url)
+					fetched, err := s.GetDocument(url)
+					if err != nil {
+						fmt.Printf("[API] Error refetching chapters for %s: %v\n", doc.Title, err)
+					}
 
 					doc.CoverURL = fetched.CoverURL
 					doc.Author = fetched.Author
@@ -105,19 +111,25 @@ func (h *API) EnsureDocument(c *fiber.Ctx) error {
 						fetched.Chapters[i].ID = 0
 						fetched.Chapters[i].Order = i + 1
 					}
-					db.DB.Clauses(clause.OnConflict{UpdateAll: true}).CreateInBatches(fetched.Chapters, 250)
+					if err := db.DB.Clauses(clause.OnConflict{
+						Columns:   []clause.Column{{Name: "document_id"}, {Name: "url"}},
+						DoUpdates: clause.AssignmentColumns([]string{"title", "order"}),
+					}).CreateInBatches(fetched.Chapters, 100).Error; err != nil {
+						fmt.Printf("[API] Error creating chapters for existing %s: %v\n", doc.Title, err)
+					}
 				}
 			}
 		}
 	}
 
 	db.DB.Preload("Chapters", func(db *gorm.DB) *gorm.DB {
-		return db.Order("CAST(\"order\" AS INTEGER) ASC")
+		return db.Select("id", "document_id", "title", "url", "order", "is_read", "status").Order("CAST(\"order\" AS INTEGER) ASC")
 	}).First(doc, doc.ID)
 
-	var count int64
-	db.DB.Model(&models.Chapter{}).Where("document_id = ? AND is_read = ?", doc.ID, true).Count(&count)
-	doc.ReadChapters = int(count)
+	var readCount int64
+	db.DB.Model(&models.Chapter{}).Where("document_id = ? AND is_read = ?", doc.ID, true).Count(&readCount)
+	doc.ReadChapters = int(readCount)
+	doc.TotalChapters = len(doc.Chapters)
 
 	return c.JSON(doc)
 }
@@ -130,12 +142,13 @@ func (h *API) GetDocumentByID(c *fiber.Ctx) error {
 	}
 
 	db.DB.Preload("Chapters", func(db *gorm.DB) *gorm.DB {
-		return db.Order("CAST(\"order\" AS INTEGER) ASC")
+		return db.Select("id", "document_id", "title", "url", "order", "is_read", "status").Order("CAST(\"order\" AS INTEGER) ASC")
 	}).First(doc, doc.ID)
 
-	var count int64
-	db.DB.Model(&models.Chapter{}).Where("document_id = ? AND is_read = ?", doc.ID, true).Count(&count)
-	doc.ReadChapters = int(count)
+	var readCount int64
+	db.DB.Model(&models.Chapter{}).Where("document_id = ? AND is_read = ?", doc.ID, true).Count(&readCount)
+	doc.ReadChapters = int(readCount)
+	doc.TotalChapters = len(doc.Chapters)
 
 	return c.JSON(doc)
 }

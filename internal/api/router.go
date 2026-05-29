@@ -29,13 +29,14 @@ func RegisterRoutes(app *fiber.App, plugins map[string]*plugin.LuaPlugin) {
 	api.Get("/plugins", h.GetActivePlugins)
 	api.Get("/plugins/all", h.GetPlugins)
 	api.Get("/plugins/manifest", h.GetPluginsManifest)
-	api.Get("/search", h.Search)
-	api.Get("/plugins/:plugin/popular", h.GetPopular)
-	api.Get("/plugins/:plugin/latest", h.GetLatest)
 	api.Post("/plugins/upload", h.UploadPlugin)
+	api.Post("/plugins/reorder", h.ReorderPlugins)
 	api.Post("/plugins/:name/toggle", h.TogglePlugin)
 	api.Delete("/plugins/:name", h.DeletePlugin)
 	api.Post("/plugins/:name/rpc/:method", h.PluginRPC)
+
+	api.Get("/search", h.Search)
+	api.Get("/discovery/search", h.Search)
 
 	api.Get("/documents", h.GetDocuments)
 	api.Post("/documents/ensure", h.EnsureDocument)
@@ -51,6 +52,9 @@ func RegisterRoutes(app *fiber.App, plugins map[string]*plugin.LuaPlugin) {
 	api.Post("/documents/batch/archive", h.BatchArchiveDocuments)
 	api.Post("/documents/batch/mark-read", h.BatchMarkReadDocuments)
 	api.Get("/history", h.GetHistory)
+	api.Delete("/history", h.ClearHistory)
+	api.Delete("/history/batch", h.BatchDeleteHistory)
+	api.Delete("/history/:id", h.DeleteHistory)
 
 	api.Get("/chapters/:id", h.GetChapterByID)
 	api.Post("/chapters/:id/read", h.ToggleChapterRead)

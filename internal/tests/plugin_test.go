@@ -9,6 +9,7 @@ import (
 
 func TestLuaPlugin(t *testing.T) {
 	luaCode := `
+		app.enable_capability("source")
 		function search(q) return {{title="Test", url="mock://test", cover_url="", info="info"}} end
 		function get_document(u) return {title="Test", url=u, chapters={{id=1, title="Ch1", url="mock://ch1"}}} end
 		function get_chapter(u) return {title="Ch1", content="Hello"} end

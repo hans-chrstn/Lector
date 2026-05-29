@@ -51,7 +51,16 @@
 			/>
 		</div>
 		<div class="sub-setting">
-			<span class="label">Spacing</span><input
+			<span class="label">Line Spacing</span><input
+				type="number"
+				step="0.1"
+				bind:value={settings.lineHeight}
+				min="1"
+				max="3"
+			/>
+		</div>
+		<div class="sub-setting">
+			<span class="label">Paragraph</span><input
 				type="number"
 				step="0.1"
 				bind:value={settings.paragraphSpacing}

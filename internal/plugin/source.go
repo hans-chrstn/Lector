@@ -1,20 +1,39 @@
 package plugin
 
 import (
+	"context"
 	"fmt"
+	"path/filepath"
+	"strings"
+	"time"
+
 	"github.com/user/lector/internal/models"
 	lua "github.com/yuin/gopher-lua"
 )
 
 func (s *LuaPlugin) callSearchFunc(name string, param lua.LValue) ([]models.SearchItem, error) {
+	pName := strings.TrimSuffix(filepath.Base(s.Path), ".lua")
+	if !s.HasCapability("source") {
+		fmt.Printf("[Security] [%s] Blocked unauthorized source call: %s (Capability 'source' not enabled)\n", pName, name)
+		return []models.SearchItem{}, nil
+	}
+
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	s.L.SetContext(ctx)
 
 	fn := s.L.GetGlobal(name)
 	if fn.Type() != lua.LTFunction {
 		return []models.SearchItem{}, nil
 	}
 	if err := s.L.CallByParam(lua.P{Fn: fn, NRet: 1, Protect: true}, param); err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			pName := strings.TrimSuffix(filepath.Base(s.Path), ".lua")
+			fmt.Printf("[Security] [%s] Execution timed out in %s\n", pName, name)
+		}
 		return []models.SearchItem{}, err
 	}
 	ret := s.L.Get(-1)
@@ -46,22 +65,49 @@ func (s *LuaPlugin) GetLatest(p int) ([]models.SearchItem, error) {
 }
 
 func (s *LuaPlugin) GetDocument(u string) (models.Document, error) {
+	pName := strings.TrimSuffix(filepath.Base(s.Path), ".lua")
+	if !s.HasCapability("source") {
+		fmt.Printf("[Security] [%s] Blocked unauthorized source call: get_document (Capability 'source' not enabled)\n", pName)
+		return models.Document{}, nil
+	}
+
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
 
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	s.L.SetContext(ctx)
+
 	if err := s.L.CallByParam(lua.P{Fn: s.L.GetGlobal("get_document"), NRet: 1, Protect: true}, lua.LString(u)); err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			pName := strings.TrimSuffix(filepath.Base(s.Path), ".lua")
+			fmt.Printf("[Security] [%s] Execution timed out in get_document\n", pName)
+		}
 		return models.Document{}, err
 	}
 	ret := s.L.Get(-1)
 	s.L.Pop(1)
 	if tbl, ok := ret.(*lua.LTable); ok {
+		luaStr := func(key string) string {
+			v := tbl.RawGetString(key)
+			if v.Type() == lua.LTNil {
+				return ""
+			}
+			return v.String()
+		}
+
 		doc := models.Document{
-			Title:    tbl.RawGetString("title").String(),
-			URL:      tbl.RawGetString("url").String(),
-			CoverURL: tbl.RawGetString("cover_url").String(),
-			Author:   tbl.RawGetString("author").String(),
-			Synopsis: tbl.RawGetString("synopsis").String(),
+			Title:    luaStr("title"),
+			URL:      luaStr("url"),
+			CoverURL: luaStr("cover_url"),
+			Author:   luaStr("author"),
+			Synopsis: luaStr("synopsis"),
+			Genres:   luaStr("genres"),
+			Status:   luaStr("status"),
 			Chapters: []models.Chapter{},
+		}
+		if doc.Title == "" {
+			doc.Title = "UNKNOWN"
 		}
 		chTbl := tbl.RawGetString("chapters")
 		if chs, ok := chTbl.(*lua.LTable); ok {
@@ -82,10 +128,24 @@ func (s *LuaPlugin) GetDocument(u string) (models.Document, error) {
 }
 
 func (s *LuaPlugin) GetChapter(u string) (models.Chapter, error) {
+	pName := strings.TrimSuffix(filepath.Base(s.Path), ".lua")
+	if !s.HasCapability("source") {
+		fmt.Printf("[Security] [%s] Blocked unauthorized source call: get_chapter (Capability 'source' not enabled)\n", pName)
+		return models.Chapter{}, nil
+	}
+
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
 
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	s.L.SetContext(ctx)
+
 	if err := s.L.CallByParam(lua.P{Fn: s.L.GetGlobal("get_chapter"), NRet: 1, Protect: true}, lua.LString(u)); err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			pName := strings.TrimSuffix(filepath.Base(s.Path), ".lua")
+			fmt.Printf("[Security] [%s] Execution timed out in get_chapter\n", pName)
+		}
 		return models.Chapter{}, err
 	}
 	ret := s.L.Get(-1)

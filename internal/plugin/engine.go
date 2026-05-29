@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/cookiejar"
@@ -25,12 +26,15 @@ type LuaPlugin struct {
 	LoadedAt       time.Time
 	Client         *http.Client
 	Mu             sync.Mutex
+	ManifestMu     sync.RWMutex
 	Tabs           []Tab
 	Sections       []Section
 	SettingsGroups []SettingsGroup
 	Actions        []Action
 	UIOverrides    map[string]map[string]string
 	Permissions    []string
+	Capabilities   []string
+	CSS            string
 }
 
 type Action struct {
@@ -72,6 +76,7 @@ func NewLuaPlugin(path string) (*LuaPlugin, error) {
 		Actions:        []Action{},
 		UIOverrides:    make(map[string]map[string]string),
 		Permissions:    []string{},
+		Capabilities:   []string{},
 	}
 
 	jar, _ := cookiejar.New(nil)
@@ -82,7 +87,15 @@ func NewLuaPlugin(path string) (*LuaPlugin, error) {
 
 	s.registerFunctions()
 
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	L.SetContext(ctx)
+
 	if err := L.DoFile(path); err != nil {
+		return nil, err
+	}
+
+	if err := s.Validate(); err != nil {
 		return nil, err
 	}
 
@@ -90,18 +103,28 @@ func NewLuaPlugin(path string) (*LuaPlugin, error) {
 }
 
 func (s *LuaPlugin) Validate() error {
-	s.Mu.Lock()
-	defer s.Mu.Unlock()
+	s.ManifestMu.RLock()
+	capLen := len(s.Capabilities)
+	s.ManifestMu.RUnlock()
+
+	if capLen == 0 {
+		return fmt.Errorf("plugin has no capabilities enabled (use app.enable_capability)")
+	}
 
 	hasSourceFuncs := true
 	for _, fn := range []string{"search", "get_document", "get_chapter"} {
-		if s.L.GetGlobal(fn).Type() != lua.LTFunction {
+		s.Mu.Lock()
+		f := s.L.GetGlobal(fn)
+		s.Mu.Unlock()
+		if f.Type() != lua.LTFunction {
 			hasSourceFuncs = false
 			break
 		}
 	}
 
-	hasUI := len(s.Tabs) > 0 || len(s.Actions) > 0 || len(s.SettingsGroups) > 0
+	s.ManifestMu.RLock()
+	hasUI := len(s.Tabs) > 0 || len(s.Actions) > 0 || len(s.SettingsGroups) > 0 || len(s.Sections) > 0
+	s.ManifestMu.RUnlock()
 
 	if !hasSourceFuncs && !hasUI {
 		return fmt.Errorf("plugin is empty: no source functions and no UI elements defined")

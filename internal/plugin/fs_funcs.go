@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,9 +17,23 @@ func (s *LuaPlugin) registerFSFunctions() {
 }
 
 func (s *LuaPlugin) fsReadFile(L *lua.LState) int {
-	path := L.CheckString(1)
 	name := strings.TrimSuffix(filepath.Base(s.Path), ".lua")
-	fullPath := filepath.Join("uploads", "plugins", name, path)
+	if !s.HasCapability("storage") {
+		fmt.Printf("[Security] [%s] Blocked unauthorized file read (Capability 'storage' not enabled)\n", name)
+		L.Push(lua.LNil)
+		return 1
+	}
+
+	path := L.CheckString(1)
+	sandboxDir, _ := filepath.Abs(filepath.Join("uploads", "plugins", name))
+	fullPath, _ := filepath.Abs(filepath.Join(sandboxDir, path))
+
+	if !strings.HasPrefix(fullPath, sandboxDir) {
+		fmt.Printf("[Security] [%s] Blocked directory traversal attempt: %s\n", name, path)
+		L.Push(lua.LNil)
+		return 1
+	}
+
 	content, err := os.ReadFile(fullPath)
 	if err != nil {
 		L.Push(lua.LNil)
@@ -29,12 +44,25 @@ func (s *LuaPlugin) fsReadFile(L *lua.LState) int {
 }
 
 func (s *LuaPlugin) fsWriteFile(L *lua.LState) int {
+	name := strings.TrimSuffix(filepath.Base(s.Path), ".lua")
+	if !s.HasCapability("storage") {
+		fmt.Printf("[Security] [%s] Blocked unauthorized file write (Capability 'storage' not enabled)\n", name)
+		L.Push(lua.LBool(false))
+		return 1
+	}
+
 	path := L.CheckString(1)
 	content := L.CheckString(2)
-	name := strings.TrimSuffix(filepath.Base(s.Path), ".lua")
-	dir := filepath.Join("uploads", "plugins", name)
-	os.MkdirAll(dir, 0755)
-	fullPath := filepath.Join(dir, path)
+	sandboxDir, _ := filepath.Abs(filepath.Join("uploads", "plugins", name))
+	fullPath, _ := filepath.Abs(filepath.Join(sandboxDir, path))
+
+	if !strings.HasPrefix(fullPath, sandboxDir) {
+		fmt.Printf("[Security] [%s] Blocked directory traversal attempt: %s\n", name, path)
+		L.Push(lua.LBool(false))
+		return 1
+	}
+
+	os.MkdirAll(sandboxDir, 0755)
 	err := os.WriteFile(fullPath, []byte(content), 0644)
 	L.Push(lua.LBool(err == nil))
 	return 1

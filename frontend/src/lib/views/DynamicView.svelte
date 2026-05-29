@@ -1,7 +1,25 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { Loader2, AlertCircle } from 'lucide-svelte';
+	import {
+		Loader2,
+		AlertCircle,
+		GripVertical,
+		Trash2,
+		Download,
+		DownloadCloud,
+		Zap,
+		Settings,
+		Info,
+		CheckCircle2,
+		History,
+		Database,
+		Layout,
+		Globe,
+		ShieldCheck
+	} from 'lucide-svelte';
+	import { dndzone } from 'svelte-dnd-action';
 	import BasePage from '../components/base/BasePage.svelte';
+	import { clsx } from 'clsx';
 
 	interface Props {
 		pluginName: string;
@@ -13,6 +31,21 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let interval: any;
+
+	const iconMap: Record<string, any> = {
+		Trash2,
+		Download,
+		DownloadCloud,
+		Zap,
+		Settings,
+		Info,
+		CheckCircle2,
+		History,
+		Database,
+		Layout,
+		Globe,
+		ShieldCheck
+	};
 
 	const getBase = () => {
 		if (typeof window !== 'undefined') return window.location.origin;
@@ -34,6 +67,36 @@
 			error = err.message || 'Failed to load plugin UI';
 		} finally {
 			if (showLoading) loading = false;
+		}
+	}
+
+	async function handleReorder(componentId: string, items: any[]) {
+		try {
+			await fetch(`${getBase()}/api/plugins/${pluginName}/rpc/on_reorder`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ component_id: componentId, items })
+			});
+		} catch (e) {
+			console.error('Failed to notify plugin of reorder:', e);
+		}
+	}
+
+	async function handlePluginAction(pluginName: string, method: string, args: any) {
+		try {
+			const res = await fetch(`${getBase()}/api/plugins/${pluginName}/rpc/${method}`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(args)
+			});
+			if (!res.ok) alert(await res.text());
+			else {
+				const data = await res.json();
+				if (data.message) alert(data.message);
+				fetchSchema(false);
+			}
+		} catch (e) {
+			console.error('Failed to execute plugin action:', e);
 		}
 	}
 
@@ -102,6 +165,78 @@
 							<p class="empty-text">No active items.</p>
 						{/each}
 					</div>
+				{:else if comp.type === 'SortableList'}
+					<div
+						class="sortable-list"
+						use:dndzone={{ items: comp.props.items, flipDurationMs: 200, type: comp.id }}
+						onconsider={(e) => {
+							const idx = schema.components.findIndex((c: any) => c.id === comp.id);
+							schema.components[idx].props.items = e.detail.items;
+						}}
+						onfinalize={(e) => {
+							const idx = schema.components.findIndex((c: any) => c.id === comp.id);
+							schema.components[idx].props.items = e.detail.items;
+							handleReorder(comp.id, e.detail.items);
+						}}
+					>
+						{#each comp.props.items || [] as item (item.id)}
+							<div class="sortable-item">
+								<div class="item-main">
+									<div class="grab-handle">
+										<GripVertical size={16} />
+									</div>
+									<div class="item-content">
+										<div class="content-left">
+											<span class="title">{item.title}</span>
+											{#if item.subtitle}
+												<span class="subtitle">{item.subtitle}</span>
+											{/if}
+										</div>
+										<div class="content-right">
+											<div class="status-group">
+												{#if item.download_url}
+													<a href={item.download_url} class="download-link" download rel="external"
+														>Download</a
+													>
+												{/if}
+												{#if item.status}
+													<span class={clsx('status-badge', item.status_variant || 'neutral')}>
+														{item.status}
+													</span>
+												{/if}
+											</div>
+											{#if item.actions}
+												<div class="item-actions">
+													{#each item.actions as action (action.method)}
+														<button
+															class="action-btn"
+															onclick={() =>
+																handlePluginAction(pluginName, action.method, { id: item.id })}
+															title={action.label}
+														>
+															{#if action.icon && iconMap[action.icon]}
+																{@const Icon = iconMap[action.icon]}
+																<Icon size={14} />
+															{:else}
+																<Zap size={14} />
+															{/if}
+														</button>
+													{/each}
+												</div>
+											{/if}
+										</div>
+									</div>
+								</div>
+								{#if item.progress !== undefined}
+									<div class="item-progress">
+										<div class="track">
+											<div class="fill" style="width: {item.progress}%"></div>
+										</div>
+									</div>
+								{/if}
+							</div>
+						{/each}
+					</div>
 				{:else}
 					<div class="unknown-component">Unsupported component type: {comp.type}</div>
 				{/if}
@@ -155,16 +290,99 @@
 		font-size: 0.875rem;
 	}
 
-	.progress-list {
+	.progress-list,
+	.sortable-list {
 		display: flex;
 		flex-direction: column;
 		gap: 1rem;
 	}
-	.progress-item {
+	.progress-item,
+	.sortable-item {
 		background: var(--bg-surface);
 		border: 1px solid var(--border-main);
 		border-radius: 12px;
 		padding: 1.25rem;
+	}
+	.sortable-item {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+	.item-main {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+	}
+	.grab-handle {
+		color: var(--text-dim);
+		cursor: grab;
+	}
+	.item-content {
+		flex: 1;
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+	}
+	.content-left {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+	.subtitle {
+		font-size: 0.75rem;
+		color: var(--text-dim);
+		font-weight: 400;
+	}
+	.content-right {
+		display: flex;
+		align-items: center;
+		gap: 1.5rem;
+	}
+	.status-badge {
+		padding: 0.25rem 0.6rem;
+		border-radius: 6px;
+		font-size: 0.7rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+	}
+	.status-badge.neutral {
+		background: var(--bg-surface-hover);
+		color: var(--text-dim);
+	}
+	.status-badge.success {
+		background: #10b98120;
+		color: #10b981;
+	}
+	.status-badge.warning {
+		background: #f59e0b20;
+		color: #f59e0b;
+	}
+	.status-badge.error {
+		background: #ef444420;
+		color: #ef4444;
+	}
+
+	.item-actions {
+		display: flex;
+		gap: 0.5rem;
+	}
+	.action-btn {
+		background: var(--bg-surface-hover);
+		border: 1px solid var(--border-main);
+		color: var(--text-main);
+		padding: 0.4rem;
+		border-radius: 8px;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+	.action-btn:hover {
+		border-color: var(--primary);
+		color: var(--primary);
+	}
+
+	.item-progress {
+		width: 100%;
 	}
 	.progress-item .info {
 		display: flex;
@@ -184,10 +402,18 @@
 		gap: 1rem;
 	}
 	.download-link {
-		color: var(--primary);
-		text-decoration: underline;
+		background: var(--text-main);
+		color: var(--bg-main);
+		padding: 0.3rem 0.8rem;
+		border-radius: 8px;
+		text-decoration: none;
 		font-weight: 700;
-		font-size: 0.8rem;
+		font-size: 0.75rem;
+		transition: all 0.2s;
+	}
+	.download-link:hover {
+		opacity: 0.9;
+		transform: translateY(-1px);
 	}
 	.track {
 		height: 6px;

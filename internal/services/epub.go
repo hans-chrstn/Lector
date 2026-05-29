@@ -20,11 +20,15 @@ import (
 type EPUBPackage struct {
 	XMLName  xml.Name `xml:"package"`
 	Metadata struct {
-		Title   string `xml:"title"`
-		Creator string `xml:"creator"`
-		Meta    []struct {
-			Name    string `xml:"name,attr"`
-			Content string `xml:"content,attr"`
+		Title       string   `xml:"title"`
+		Creator     string   `xml:"creator"`
+		Description string   `xml:"description"`
+		Subject     []string `xml:"subject"`
+		Meta        []struct {
+			Name     string `xml:"name,attr"`
+			Property string `xml:"property,attr"`
+			Content  string `xml:"content,attr"`
+			Value    string `xml:",chardata"`
 		} `xml:"meta"`
 	} `xml:"metadata"`
 	Manifest struct {
@@ -155,10 +159,56 @@ func processEPUB(path string) (*models.Document, error) {
 
 	document.Title = title
 	document.Author = author
+	document.Genres = strings.Join(pkg.Metadata.Subject, ", ")
 	document.Source = "local"
 	document.IsLocal = true
 	document.LocalPath = path
 	document.IsInLibrary = true
+
+	rawDesc := pkg.Metadata.Description
+	if rawDesc != "" && rawDesc != "nil" {
+		lines := strings.Split(rawDesc, "\n")
+		foundMeta := false
+		var cleanSynopsis []string
+
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+
+			if strings.HasPrefix(line, "Genres:") {
+				document.Genres = strings.TrimSpace(strings.TrimPrefix(line, "Genres:"))
+				foundMeta = true
+			} else if strings.HasPrefix(line, "Status:") {
+				document.Status = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(line, "Status:")))
+				foundMeta = true
+			} else if strings.HasPrefix(line, "Synopsis:") {
+				foundMeta = true
+				continue
+			} else {
+				cleanSynopsis = append(cleanSynopsis, line)
+			}
+		}
+
+		if foundMeta {
+			document.Synopsis = strings.Join(cleanSynopsis, "\n")
+		} else {
+			document.Synopsis = rawDesc
+		}
+	}
+
+	for _, m := range pkg.Metadata.Meta {
+		if m.Name == "status" || m.Property == "status" {
+			val := m.Content
+			if val == "" {
+				val = m.Value
+			}
+			if val != "" {
+				document.Status = strings.ToLower(strings.TrimSpace(val))
+			}
+		}
+	}
 
 	coverHref := ""
 	for _, item := range pkg.Manifest.Items {
@@ -198,31 +248,6 @@ func processEPUB(path string) (*models.Document, error) {
 			}
 		}
 	}
-
-	remoteMeta := FetchRemoteMetadata(document.Title, document.Author)
-	if remoteMeta != nil {
-		if document.CoverURL == "" && remoteMeta.CoverURL != "" {
-			resp, err := http.Get(remoteMeta.CoverURL)
-			if err == nil && resp.StatusCode == 200 {
-				localCoverName := fmt.Sprintf("remote_%s.jpg", strings.ReplaceAll(document.Title, " ", "_"))
-				localCoverPath := filepath.Join("uploads", localCoverName)
-				out, _ := os.Create(localCoverPath)
-				io.Copy(out, resp.Body)
-				out.Close()
-				resp.Body.Close()
-				document.CoverURL = "/uploads/" + localCoverName
-			}
-		}
-		if (document.Synopsis == "" || strings.EqualFold(document.Synopsis, "no description")) && remoteMeta.Synopsis != "" {
-			document.Synopsis = remoteMeta.Synopsis
-		}
-	}
-
-	if err := db.DB.Save(&document).Error; err != nil {
-		return nil, err
-	}
-
-	db.DB.Unscoped().Where("document_id = ?", document.ID).Delete(&models.Chapter{})
 
 	manifest := make(map[string]string)
 	for _, item := range pkg.Manifest.Items {
@@ -270,6 +295,41 @@ func processEPUB(path string) (*models.Document, error) {
 			body = string(content)
 		}
 
+		lowerTitle := strings.ToLower(chTitle)
+		lowerDocTitle := strings.ToLower(document.Title)
+		isTitlePage := lowerTitle == lowerDocTitle || strings.HasPrefix(lowerTitle, lowerDocTitle+":")
+		isPreface := lowerTitle == "preface" || lowerTitle == "metadata" || lowerTitle == "introduction" || lowerTitle == "cover"
+
+		if isTitlePage || isPreface {
+			if document.Synopsis == "" || document.Synopsis == "nil" || len(document.Synopsis) < 10 {
+				txt := strings.TrimSpace(cDoc.Find("div, p").Text())
+				if len(txt) > 20 {
+					document.Synopsis = txt
+				}
+			}
+			if document.Genres == "" || document.Genres == "nil" {
+				cDoc.Find("p").Each(func(i int, s *goquery.Selection) {
+					t := s.Text()
+					if strings.Contains(t, "Genres:") {
+						document.Genres = strings.TrimSpace(strings.ReplaceAll(t, "Genres:", ""))
+					}
+					if strings.Contains(t, "Status:") {
+						document.Status = strings.ToLower(strings.TrimSpace(strings.ReplaceAll(t, "Status:", "")))
+					}
+				})
+			}
+
+			cleanBody := strings.ToLower(cDoc.Text())
+			shouldSkip := strings.Contains(cleanBody, "cover image") ||
+				strings.Contains(cleanBody, "genres:") ||
+				strings.Contains(cleanBody, "status:") ||
+				len(strings.TrimSpace(cleanBody)) < 400
+
+			if shouldSkip {
+				continue
+			}
+		}
+
 		fixedBody := fixer.FixChapter(body, fullHref)
 		cleanBody := plugin.CleanHTML(fixedBody, chTitle)
 
@@ -283,6 +343,31 @@ func processEPUB(path string) (*models.Document, error) {
 		})
 		order++
 	}
+
+	remoteMeta := FetchRemoteMetadata(document.Title, document.Author)
+	if remoteMeta != nil {
+		if document.CoverURL == "" && remoteMeta.CoverURL != "" {
+			resp, err := http.Get(remoteMeta.CoverURL)
+			if err == nil && resp.StatusCode == 200 {
+				localCoverName := fmt.Sprintf("cover_%s.jpg", strings.ReplaceAll(document.Title, " ", "_"))
+				localCoverPath := filepath.Join("uploads", localCoverName)
+				out, _ := os.Create(localCoverPath)
+				io.Copy(out, resp.Body)
+				out.Close()
+				resp.Body.Close()
+				document.CoverURL = "/uploads/" + localCoverName
+			}
+		}
+		if (document.Synopsis == "" || strings.EqualFold(document.Synopsis, "no description") || document.Synopsis == "nil") && remoteMeta.Synopsis != "" {
+			document.Synopsis = remoteMeta.Synopsis
+		}
+	}
+
+	if err := db.DB.Save(&document).Error; err != nil {
+		return nil, err
+	}
+
+	db.DB.Unscoped().Where("document_id = ?", document.ID).Delete(&models.Chapter{})
 	db.DB.CreateInBatches(chapters, 100)
 	document.Chapters = chapters
 	return &document, nil

@@ -39,8 +39,18 @@ export const api = {
 			body: formData
 		}).then((r) => r.json());
 	},
+	async reorderPlugins(names: string[]): Promise<void> {
+		await fetch(`${getBase()}/api/plugins/reorder`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(names)
+		});
+	},
 	async deletePlugin(name: string): Promise<void> {
 		await fetch(`${getBase()}/api/plugins/${name}`, { method: 'DELETE' });
+	},
+	async getActivePlugins(): Promise<string[]> {
+		return fetch(`${getBase()}/api/plugins`).then((r) => r.json());
 	},
 	async getGroups(): Promise<Group[]> {
 		return fetch(`${getBase()}/api/groups`).then((r) => r.json());
@@ -187,6 +197,19 @@ export const api = {
 	},
 	async getHistory(): Promise<Document[]> {
 		return fetch(`${getBase()}/api/history`).then((r) => r.json());
+	},
+	async deleteHistory(id: number): Promise<void> {
+		await fetch(`${getBase()}/api/history/${id}`, { method: 'DELETE' });
+	},
+	async clearHistory(): Promise<void> {
+		await fetch(`${getBase()}/api/history`, { method: 'DELETE' });
+	},
+	async batchDeleteHistory(ids: number[]): Promise<void> {
+		await fetch(`${getBase()}/api/history/batch`, {
+			method: 'DELETE',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ ids })
+		});
 	},
 	async getBookmarks(documentId: number): Promise<Bookmark[]> {
 		return fetch(`${getBase()}/api/documents/${documentId}/bookmarks`).then((r) => r.json());

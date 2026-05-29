@@ -49,6 +49,22 @@
 	let activeDocument = $state<Document | null>(null);
 	let activeChapter = $state<Chapter | null>(null);
 
+	$effect(() => {
+		if (typeof document !== 'undefined') {
+			const oldStyles = document.querySelectorAll('style[data-plugin-style]');
+			oldStyles.forEach((s) => s.remove());
+
+			plugins.forEach((p) => {
+				if (p.is_enabled && p.css) {
+					const style = document.createElement('style');
+					style.setAttribute('data-plugin-style', p.name);
+					style.textContent = p.css;
+					document.head.appendChild(style);
+				}
+			});
+		}
+	});
+
 	onMount(async () => {
 		try {
 			await Promise.all([refreshPlugins(), refreshGroups(), refreshDocuments()]);
@@ -56,9 +72,12 @@
 	});
 
 	async function refreshPlugins() {
-		const manifest = await api.getPluginsManifest();
+		const [manifest, activeSources] = await Promise.all([
+			api.getPluginsManifest(),
+			api.getActivePlugins()
+		]);
 		plugins = [baseManifest, ...manifest];
-		sources = plugins.flatMap((p) => (p.name !== 'system' && p.is_loaded ? [p.name] : []));
+		sources = activeSources || [];
 	}
 
 	$effect(() => {
@@ -272,7 +291,28 @@
 					onBatchMarkRead={handleBatchMarkRead}
 				/>
 			{:else if view === 'history'}
-				<History {history} onOpenDocument={(n) => handleSelectDocument(n.url, n.source)} />
+				<History
+					{history}
+					onOpenDocument={(n) => handleSelectDocument(n.url, n.source)}
+					onRemove={async (id) => {
+						await api.deleteHistory(id);
+						await refreshHistory();
+					}}
+					onClearAll={async () => {
+						confirmTitle = 'Clear History';
+						confirmMessage = 'Are you sure you want to clear your entire reading history?';
+						onConfirm = async () => {
+							await api.clearHistory();
+							await refreshHistory();
+							showConfirmModal = false;
+						};
+						showConfirmModal = true;
+					}}
+					onBatchRemove={async (ids) => {
+						await api.batchDeleteHistory(ids);
+						await refreshHistory();
+					}}
+				/>
 			{:else if view === 'search'}
 				<Search
 					{sources}
@@ -379,7 +419,7 @@
 				<button class="modal-btn secondary" onclick={() => (showConfirmModal = false)}
 					>Cancel</button
 				>
-				<button class="modal-btn danger" onclick={() => onConfirm?.()}>Confirm</button>
+				<button class="modal-btn danger-glow" onclick={() => onConfirm?.()}>Confirm</button>
 			</div>
 		</div>
 	</Modal>
@@ -552,30 +592,54 @@
 		display: flex;
 		justify-content: flex-end;
 		gap: 0.75rem;
+		margin-top: 1rem;
 	}
+
 	.modal-btn {
-		padding: 0.6rem 1.2rem;
-		border-radius: 8px;
+		padding: 0.75rem 1.5rem;
+		border-radius: 12px;
 		font-size: 0.875rem;
-		font-weight: 600;
+		font-weight: 700;
 		cursor: pointer;
 		border: none;
-		transition: all 0.2s;
+		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+		display: flex;
+		align-items: center;
+		justify-content: center;
 	}
+
 	.modal-btn.primary {
-		background: var(--primary);
-		color: white;
+		background: white;
+		color: black;
+		box-shadow: 0 4px 12px rgba(255, 255, 255, 0.1);
 	}
+
+	.modal-btn.primary:hover {
+		background: #f4f4f5;
+		transform: translateY(-1px);
+		box-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
+	}
+
 	.modal-btn.secondary {
 		background: var(--bg-surface-hover);
 		color: var(--text-main);
+		border: 1px solid var(--border-main);
 	}
-	.modal-btn.danger {
-		background: var(--accent);
+
+	.modal-btn.secondary:hover {
+		background: var(--border-main);
+		border-color: var(--text-dim);
+	}
+
+	.modal-btn.danger-glow {
+		background: #ef4444;
 		color: white;
+		box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
 	}
-	.modal-btn:hover {
-		opacity: 0.9;
+
+	.modal-btn.danger-glow:hover {
+		background: #dc2626;
 		transform: translateY(-1px);
+		box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
 	}
 </style>

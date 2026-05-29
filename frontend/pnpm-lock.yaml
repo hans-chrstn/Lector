@@ -19,6 +19,9 @@ importers:
       lucide-svelte:
         specifier: ^1.0.1
         version: 1.0.1(svelte@5.55.5(@typescript-eslint/types@8.59.1))
+      svelte-dnd-action:
+        specifier: ^0.9.69
+        version: 0.9.69(svelte@5.55.5(@typescript-eslint/types@8.59.1))
       tailwind-merge:
         specifier: ^3.5.0
         version: 3.5.0
@@ -1406,6 +1409,14 @@ packages:
       svelte: ^4.0.0 || ^5.0.0-next.0
       typescript: '>=5.0.0'
 
+  svelte-dnd-action@0.9.69:
+    resolution:
+      {
+        integrity: sha512-NAmSOH7htJoYraTQvr+q5whlIuVoq88vEuHr4NcFgscDRUxfWPPxgie2OoxepBCQCikrXZV4pqV86aun60wVyw==
+      }
+    peerDependencies:
+      svelte: '>=3.23.0 || ^5.0.0-next.0'
+
   svelte-eslint-parser@1.6.0:
     resolution:
       {
@@ -2319,6 +2330,10 @@ snapshots:
       typescript: 6.0.3
     transitivePeerDependencies:
       - picomatch
+
+  svelte-dnd-action@0.9.69(svelte@5.55.5(@typescript-eslint/types@8.59.1)):
+    dependencies:
+      svelte: 5.55.5(@typescript-eslint/types@8.59.1)
 
   svelte-eslint-parser@1.6.0(svelte@5.55.5(@typescript-eslint/types@8.59.1)):
     dependencies:

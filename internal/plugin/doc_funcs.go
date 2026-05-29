@@ -15,8 +15,28 @@ func (s *LuaPlugin) registerDocFunctions() {
 	doc := s.L.NewTable()
 	s.L.SetField(doc, "clean", s.L.NewFunction(s.docClean))
 	s.L.SetField(doc, "update_chapter_content", s.L.NewFunction(s.docUpdateChapterContent))
+	s.L.SetField(doc, "update_metadata", s.L.NewFunction(s.docUpdateMetadata))
 	s.L.SetField(doc, "get_chapters", s.L.NewFunction(s.docGetChapters))
 	s.L.SetGlobal("doc", doc)
+}
+
+func (s *LuaPlugin) docUpdateMetadata(L *lua.LState) int {
+	docID := L.CheckInt(1)
+	meta := L.CheckTable(2)
+
+	updates := make(map[string]interface{})
+	meta.ForEach(func(k, v lua.LValue) {
+		val := ""
+		if v.Type() != lua.LTNil {
+			val = v.String()
+		}
+		updates[k.String()] = val
+	})
+
+	result := db.DB.Model(&models.Document{}).Where("id = ?", docID).Updates(updates)
+
+	L.Push(lua.LBool(result.Error == nil))
+	return 1
 }
 
 func (s *LuaPlugin) cssSelect(L *lua.LState) int {

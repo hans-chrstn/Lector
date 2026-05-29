@@ -1,10 +1,12 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/user/lector/internal/db"
@@ -71,6 +73,8 @@ func (h *API) GetPluginsManifest(c *fiber.Ctx) error {
 		Actions        []plugin.Action              `json:"actions"`
 		UIOverrides    map[string]map[string]string `json:"ui_overrides"`
 		Permissions    []string                     `json:"permissions"`
+		Capabilities   []string                     `json:"capabilities"`
+		CSS            string                       `json:"css"`
 	}
 
 	pluginDir := getPluginDir()
@@ -89,7 +93,7 @@ func (h *API) GetPluginsManifest(c *fiber.Ctx) error {
 	}
 
 	var dbPlugins []models.Plugin
-	db.DB.Find(&dbPlugins)
+	db.DB.Order("priority ASC, name ASC").Find(&dbPlugins)
 
 	manifests := []PluginManifest{}
 	for _, p := range dbPlugins {
@@ -131,6 +135,8 @@ func (h *API) GetPluginsManifest(c *fiber.Ctx) error {
 			m.Actions = s.Actions
 			m.UIOverrides = s.UIOverrides
 			m.Permissions = s.Permissions
+			m.Capabilities = s.Capabilities
+			m.CSS = s.CSS
 		}
 
 		manifests = append(manifests, m)
@@ -141,8 +147,22 @@ func (h *API) GetPluginsManifest(c *fiber.Ctx) error {
 
 func (h *API) GetPlugins(c *fiber.Ctx) error {
 	var plugins []models.Plugin
-	db.DB.Find(&plugins)
+	db.DB.Order("priority ASC, name ASC").Find(&plugins)
 	return c.JSON(plugins)
+}
+
+func (h *API) ReorderPlugins(c *fiber.Ctx) error {
+	var req []string
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).SendString("Invalid request")
+	}
+
+	fmt.Printf("[Plugins] Reordering plugins: %v\n", req)
+	for i, name := range req {
+		db.DB.Model(&models.Plugin{}).Where("name = ?", name).Update("priority", i)
+	}
+
+	return c.SendString("Reordered")
 }
 
 func (h *API) TogglePlugin(c *fiber.Ctx) error {
@@ -217,7 +237,14 @@ func (h *API) PluginRPC(c *fiber.Ctx) error {
 		body = "{}"
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	p.L.SetContext(ctx)
+
 	if err := p.L.CallByParam(lua.P{Fn: fn, NRet: 1, Protect: true}, lua.LString(body)); err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			fmt.Printf("[Security] [%s] RPC execution timed out in %s\n", name, method)
+		}
 		return c.Status(500).SendString(fmt.Sprintf("RPC error: %v", err))
 	}
 

@@ -1,9 +1,7 @@
 package plugin
 
 import (
-	"fmt"
 	"net/url"
-	"strings"
 
 	lua "github.com/yuin/gopher-lua"
 )
@@ -42,27 +40,6 @@ func (s *LuaPlugin) urlJoin(L *lua.LState) int {
 
 func (s *LuaPlugin) netFetch(L *lua.LState) int {
 	u := L.CheckString(1)
-
-	parsed, err := url.Parse(u)
-	if err != nil {
-		L.Push(lua.LString("Invalid URL"))
-		return 1
-	}
-
-	allowed := false
-	for _, domain := range s.Permissions {
-		if domain == "*" || strings.HasSuffix(parsed.Host, domain) {
-			allowed = true
-			break
-		}
-	}
-
-	if !allowed {
-		fmt.Printf("[Security] Blocked unauthorized fetch to %s from plugin\n", parsed.Host)
-		L.Push(lua.LString("UNAUTHORIZED: Domain not in plugin permissions"))
-		return 1
-	}
-
 	L.Push(lua.LString(s.Fetch("GET", u, "", "", false)))
 	return 1
 }

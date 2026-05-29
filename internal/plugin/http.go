@@ -3,7 +3,10 @@ package plugin
 import (
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -21,6 +24,41 @@ var (
 )
 
 func (s *LuaPlugin) Fetch(method, u, postData, referer string, isAjax bool) string {
+	name := strings.TrimSuffix(filepath.Base(s.Path), ".lua")
+
+	if !s.HasCapability("network") {
+		fmt.Printf("[Security] [%s] Blocked unauthorized network request (Capability 'network' not enabled)\n", name)
+		return "ERROR: Network access not enabled"
+	}
+
+	parsed, err := url.Parse(u)
+	if err != nil {
+		fmt.Printf("[Security] [%s] Invalid URL: %s\n", name, u)
+		return "ERROR: Invalid URL"
+	}
+
+	allowed := false
+	if len(s.Permissions) == 0 {
+		allowed = true
+	} else {
+		for _, domain := range s.Permissions {
+			if domain == "*" || strings.HasSuffix(parsed.Host, domain) {
+				allowed = true
+				break
+			}
+		}
+	}
+
+	if !allowed {
+		fmt.Printf("[Security] [%s] Blocked unauthorized fetch to %s (Domain not in permissions)\n", name, parsed.Host)
+		return "ERROR: Unauthorized domain"
+	}
+
+	if isPrivateHost(parsed.Host) {
+		fmt.Printf("[Security] [%s] Blocked SSRF attempt to private host: %s\n", name, parsed.Host)
+		return "ERROR: Unauthorized access to local network"
+	}
+
 	var body io.Reader
 	if method == "POST" {
 		body = strings.NewReader(postData)
@@ -56,8 +94,38 @@ func (s *LuaPlugin) Fetch(method, u, postData, referer string, isAjax bool) stri
 	content := string(out)
 
 	if strings.Contains(content, "cf-browser-verification") || resp.StatusCode == 403 {
-		fmt.Printf("[Plugin] Anti-Bot detected at %s\n", u)
+		fmt.Printf("[Plugin] [%s] Anti-Bot detected at %s\n", name, u)
 	}
 
 	return content
+}
+
+func isPrivateHost(host string) bool {
+	hostname, _, err := net.SplitHostPort(host)
+	if err != nil {
+		hostname = host
+	}
+
+	if hostname == "localhost" {
+		return true
+	}
+
+	ips, err := net.LookupIP(hostname)
+	if err != nil {
+		return false
+	}
+
+	for _, ip := range ips {
+		if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+			return true
+		}
+		if ip4 := ip.To4(); ip4 != nil {
+			if ip4[0] == 10 ||
+				(ip4[0] == 172 && ip4[1] >= 16 && ip4[1] <= 31) ||
+				(ip4[0] == 192 && ip4[1] == 168) {
+				return true
+			}
+		}
+	}
+	return false
 }

@@ -77,6 +77,8 @@ export interface PluginManifest {
 	}[];
 	ui_overrides: Record<string, Record<string, string>>;
 	permissions: string[];
+	capabilities: string[];
+	css: string;
 }
 
 export interface Bookmark {

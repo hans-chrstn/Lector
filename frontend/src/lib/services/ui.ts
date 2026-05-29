@@ -38,5 +38,7 @@ export const baseManifest: PluginManifest = {
 	settings_groups: [],
 	actions: [],
 	ui_overrides: {},
-	permissions: []
+	permissions: [],
+	capabilities: ['ui'],
+	css: ''
 };
