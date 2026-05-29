@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -21,8 +22,11 @@ func (h *API) ProxyImage(c *fiber.Ctx) error {
 		return c.Status(400).SendString("Missing url")
 	}
 	if strings.HasPrefix(imgURL, "/uploads/") || strings.HasPrefix(imgURL, "uploads/") {
-		path := strings.TrimPrefix(imgURL, "/")
-		return c.SendFile(path)
+		cleanPath := filepath.Clean(strings.TrimPrefix(imgURL, "/"))
+		if !strings.HasPrefix(cleanPath, "uploads/") && !strings.HasPrefix(cleanPath, "uploads\\") {
+			return c.Status(403).SendString("Security: Access denied")
+		}
+		return c.SendFile(cleanPath)
 	}
 	if imgURL == "MISSING" {
 		return c.Status(404).SendString("No image URL provided")

@@ -104,6 +104,11 @@ func processComic(path string) (*models.Document, error) {
 }
 
 func GetImageFromArchive(docID uint, fileName string) ([]byte, string, error) {
+	cleanName := filepath.ToSlash(filepath.Clean(fileName))
+	if strings.Contains(cleanName, "..") || strings.HasPrefix(cleanName, "/") {
+		return nil, "", fmt.Errorf("security: invalid archive file path")
+	}
+
 	var doc models.Document
 	if err := db.DB.First(&doc, docID).Error; err != nil {
 		return nil, "", err
@@ -118,7 +123,7 @@ func GetImageFromArchive(docID uint, fileName string) ([]byte, string, error) {
 		defer r.Close()
 
 		for _, f := range r.File {
-			if f.Name == fileName {
+			if f.Name == cleanName {
 				rc, err := f.Open()
 				if err != nil {
 					return nil, "", err
@@ -128,7 +133,7 @@ func GetImageFromArchive(docID uint, fileName string) ([]byte, string, error) {
 				if err != nil {
 					return nil, "", err
 				}
-				return data, mime.TypeByExtension(filepath.Ext(fileName)), nil
+				return data, mime.TypeByExtension(filepath.Ext(cleanName)), nil
 			}
 		}
 	} else if ext == ".cbr" {
@@ -148,12 +153,12 @@ func GetImageFromArchive(docID uint, fileName string) ([]byte, string, error) {
 			if err != nil {
 				break
 			}
-			if header.Name == fileName {
+			if header.Name == cleanName {
 				data, err := io.ReadAll(rr)
 				if err != nil {
 					return nil, "", err
 				}
-				return data, mime.TypeByExtension(filepath.Ext(fileName)), nil
+				return data, mime.TypeByExtension(filepath.Ext(cleanName)), nil
 			}
 		}
 	}

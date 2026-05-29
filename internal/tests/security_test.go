@@ -219,3 +219,50 @@ func TestStoredXSSProtection(t *testing.T) {
 		}
 	})
 }
+
+func TestLFIPolish(t *testing.T) {
+	app := fiber.New()
+	api.RegisterRoutes(app, nil)
+
+	t.Run("Image Proxy Blocks Traversal", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/proxy-image?url=uploads/../../etc/passwd", nil)
+		resp, _ := app.Test(req)
+		if resp.StatusCode != 403 {
+			t.Errorf("Expected 403 for traversal attempt, got %d", resp.StatusCode)
+		}
+	})
+}
+
+func TestSecurityHeaders(t *testing.T) {
+	app := fiber.New()
+	app.Use(func(c *fiber.Ctx) error {
+		c.Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline';")
+		return c.Next()
+	})
+	app.Get("/test", func(c *fiber.Ctx) error { return c.SendString("OK") })
+
+	t.Run("CSP Header Present", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/test", nil)
+		resp, _ := app.Test(req)
+		csp := resp.Header.Get("Content-Security-Policy")
+		if !strings.Contains(csp, "default-src 'self'") || !strings.Contains(csp, "unsafe-inline") {
+			t.Errorf("CSP header missing or incorrect: %s", csp)
+		}
+	})
+}
+
+func TestDatabasePermissions(t *testing.T) {
+	path := "test_perms.db"
+	defer os.Remove(path)
+
+	db.InitDB(path)
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("Failed to stat db: %v", err)
+	}
+
+	mode := info.Mode().Perm()
+	if mode != 0600 {
+		t.Errorf("Expected 0600 permissions, got %v", mode)
+	}
+}

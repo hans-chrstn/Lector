@@ -37,6 +37,10 @@ func InitDB(path string) {
 		log.Fatalf("Failed to connect database: %v", err)
 	}
 
+	if path != ":memory:" {
+		os.Chmod(path, 0600)
+	}
+
 	DB.AutoMigrate(&models.Document{}, &models.Chapter{}, &models.ReadingProgress{}, &models.Group{}, &models.CacheItem{}, &models.Bookmark{}, &models.Note{}, &models.Plugin{})
 	log.Println("Database initialized in Silent Mode")
 }

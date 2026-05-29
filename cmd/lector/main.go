@@ -33,6 +33,14 @@ func main() {
 		BodyLimit: uploadLimitMB * 1024 * 1024,
 	})
 
+	app.Use(func(c *fiber.Ctx) error {
+		c.Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' https://*; script-src 'self' 'unsafe-inline'; worker-src 'self' blob:; frame-ancestors 'none'; object-src 'none';")
+		c.Set("X-Frame-Options", "DENY")
+		c.Set("X-Content-Type-Options", "nosniff")
+		c.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		return c.Next()
+	})
+
 	app.Use(limiter.New(limiter.Config{
 		Max:        120,
 		Expiration: 1 * time.Minute,
@@ -63,12 +71,11 @@ func main() {
 	app.Use("/api/documents/*/export", heavyLimiter)
 
 	origins := os.Getenv("CORS_ALLOW_ORIGINS")
-	if origins == "" {
-		origins = "*"
+	if origins != "" {
+		app.Use(cors.New(cors.Config{
+			AllowOrigins: origins,
+		}))
 	}
-	app.Use(cors.New(cors.Config{
-		AllowOrigins: origins,
-	}))
 
 	plugins := loadPlugins()
 	plugin.GlobalPlugins = plugins
@@ -91,23 +98,18 @@ func main() {
 
 func loadPlugins() map[string]*plugin.LuaPlugin {
 	pluginsMap := make(map[string]*plugin.LuaPlugin)
-
 	pluginDir := "plugins"
 	os.MkdirAll(pluginDir, 0755)
-
 	files, _ := os.ReadDir(pluginDir)
-
 	for _, file := range files {
 		if filepath.Ext(file.Name()) == ".lua" {
 			name := file.Name()[:len(file.Name())-4]
-
 			var p models.Plugin
 			result := db.DB.Where("name = ?", name).First(&p)
 			if result.Error != nil {
 				p = models.Plugin{Name: name, IsEnabled: true}
 				db.DB.Create(&p)
 			}
-
 			if p.IsEnabled {
 				s, err := plugin.NewLuaPlugin(filepath.Join(pluginDir, file.Name()))
 				if err == nil {
