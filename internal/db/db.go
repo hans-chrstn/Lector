@@ -37,6 +37,11 @@ func InitDB(path string) {
 		log.Fatalf("Failed to connect database: %v", err)
 	}
 
+	sqlDB, _ := DB.DB()
+	sqlDB.Exec("PRAGMA journal_mode=WAL;")
+	sqlDB.Exec("PRAGMA busy_timeout=5000;")
+	sqlDB.Exec("PRAGMA synchronous=NORMAL;")
+
 	if path != ":memory:" {
 		os.Chmod(path, 0600)
 	}

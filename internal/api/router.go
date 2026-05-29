@@ -75,4 +75,7 @@ func RegisterRoutes(app *fiber.App, plugins map[string]*plugin.LuaPlugin) {
 	api.Get("/documents/:documentId/notes", h.GetNotes)
 	api.Post("/notes", h.AddNote)
 	api.Delete("/notes/:id", h.DeleteNote)
+
+	api.Get("/opds", h.GetOPDSRoot)
+	api.Get("/opds/all", h.GetOPDSAll)
 }
