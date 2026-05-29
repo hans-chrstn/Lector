@@ -164,3 +164,37 @@ func TestRateLimiting(t *testing.T) {
 		}
 	})
 }
+
+func TestStoredXSSProtection(t *testing.T) {
+	t.Run("Strips Script Tags", func(t *testing.T) {
+		html := `<div>Hello<script>alert("XSS")</script> World</div>`
+		sanitized := plugin.CleanHTML(html, "")
+		if strings.Contains(sanitized, "<script>") {
+			t.Errorf("Script tag was not removed")
+		}
+	})
+
+	t.Run("Strips Event Handlers", func(t *testing.T) {
+		html := `<img src="x" onerror="alert(1)">`
+		sanitized := plugin.CleanHTML(html, "")
+		if strings.Contains(sanitized, "onerror") {
+			t.Errorf("Event handler (onerror) was not removed")
+		}
+	})
+
+	t.Run("Strips Javascript Links", func(t *testing.T) {
+		html := `<a href="javascript:alert(1)">Click Me</a>`
+		sanitized := plugin.CleanHTML(html, "")
+		if strings.Contains(sanitized, "javascript:") {
+			t.Errorf("Javascript link was not removed")
+		}
+	})
+
+	t.Run("Preserves Safe Content", func(t *testing.T) {
+		html := `<h1>Title</h1><p>This is <b>bold</b> and <i>italic</i>.</p><img src="/uploads/test.jpg">`
+		sanitized := plugin.CleanHTML(html, "")
+		if !strings.Contains(sanitized, "<h1>Title</h1>") || !strings.Contains(sanitized, "<b>bold</b>") {
+			t.Errorf("Safe HTML was incorrectly removed")
+		}
+	})
+}

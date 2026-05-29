@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/microcosm-cc/bluemonday"
 )
 
 func CleanHTML(html string, chapterTitle string) string {
@@ -69,5 +70,7 @@ func CleanHTML(html string, chapterTitle string) string {
 	if h == "" {
 		h, _ = doc.Html()
 	}
-	return h
+
+	p := bluemonday.UGCPolicy()
+	return p.Sanitize(h)
 }
