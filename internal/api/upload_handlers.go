@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 	"net/http"
@@ -36,18 +37,27 @@ func (h *API) HandleUpload(c *fiber.Ctx) error {
 	contentType := http.DetectContentType(head)
 	isPDF := contentType == "application/pdf"
 	isZIP := contentType == "application/zip" || contentType == "application/x-zip-compressed"
+	isRAR := false
 
 	if !isPDF && !isZIP {
+		if bytes.HasPrefix(head, []byte("Rar!\x1a\x07\x00")) || bytes.HasPrefix(head, []byte("Rar!\x1a\x07\x01\x00")) {
+			isRAR = true
+		}
+	}
+
+	if !isPDF && !isZIP && !isRAR {
 		log.Printf("[API] Blocked invalid upload type: %s", contentType)
-		return c.Status(400).SendString("Only EPUB and PDF files are allowed")
+		return c.Status(400).SendString("Only EPUB, PDF, CBZ, and CBR files are allowed")
 	}
 
 	newID := uuid.New().String()
 	ext := filepath.Ext(file.Filename)
 	if isPDF && !strings.EqualFold(ext, ".pdf") {
 		ext = ".pdf"
-	} else if isZIP && !strings.EqualFold(ext, ".epub") {
+	} else if isZIP && !strings.EqualFold(ext, ".epub") && !strings.EqualFold(ext, ".cbz") {
 		ext = ".epub"
+	} else if isRAR && !strings.EqualFold(ext, ".cbr") {
+		ext = ".cbr"
 	}
 
 	fileName := fmt.Sprintf("%s%s", newID, ext)

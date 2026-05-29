@@ -233,7 +233,7 @@
 	.detail-container {
 		padding-bottom: 5rem;
 		animation: fadeIn 0.3s ease-out;
-		max-width: 1200px;
+		max-width: 1400px;
 		margin: 0 auto;
 	}
 

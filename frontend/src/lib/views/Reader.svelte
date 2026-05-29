@@ -511,6 +511,14 @@
 	:global(.prose p) {
 		margin-bottom: var(--p-spacing);
 	}
+	:global(.prose img.comic-page) {
+		max-width: 100%;
+		height: auto;
+		display: block;
+		margin: 0 auto 1.5rem auto;
+		border-radius: 12px;
+		box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+	}
 	.stack-divider {
 		height: 1px;
 		background: var(--border-main);

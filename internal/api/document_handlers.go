@@ -238,3 +238,24 @@ func (h *API) MigrateDocument(c *fiber.Ctx) error {
 	h.DocumentService.Save(doc)
 	return c.SendString("Migrated")
 }
+
+func (h *API) GetArchiveImage(c *fiber.Ctx) error {
+	id, _ := strconv.Atoi(c.Params("id"))
+	fileName := c.Query("file")
+	if fileName == "" {
+		return c.Status(400).SendString("Missing file parameter")
+	}
+
+	data, contentType, err := services.GetImageFromArchive(uint(id), fileName)
+	if err != nil {
+		return c.Status(500).SendString(err.Error())
+	}
+
+	if contentType == "" {
+		contentType = "image/jpeg"
+	}
+
+	c.Set("Content-Type", contentType)
+	c.Set("Cache-Control", "public, max-age=604800")
+	return c.Send(data)
+}

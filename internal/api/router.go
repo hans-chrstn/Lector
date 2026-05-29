@@ -47,6 +47,7 @@ func RegisterRoutes(app *fiber.App, plugins map[string]*plugin.LuaPlugin) {
 	api.Get("/documents/:id/progress", h.GetDocumentProgress)
 	api.Post("/documents/:id/migrate", h.MigrateDocument)
 	api.Get("/documents/:id/export", h.ExportDocument)
+	api.Get("/documents/:id/archive-image", h.GetArchiveImage)
 	api.Delete("/documents/batch", h.BatchDeleteDocuments)
 	api.Post("/documents/batch/move", h.BatchMoveDocuments)
 	api.Post("/documents/batch/archive", h.BatchArchiveDocuments)

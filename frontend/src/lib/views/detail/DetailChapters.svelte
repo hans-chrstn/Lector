@@ -171,8 +171,15 @@
 		background: rgba(var(--primary-rgb), 0.1);
 	}
 	.chapters-list {
-		display: flex;
-		flex-direction: column;
+		display: grid;
+		grid-template-columns: 1fr;
 		gap: 0.75rem;
+	}
+
+	@media (min-width: 1200px) {
+		.chapters-list {
+			grid-template-columns: 1fr 1fr;
+			gap: 1rem;
+		}
 	}
 </style>

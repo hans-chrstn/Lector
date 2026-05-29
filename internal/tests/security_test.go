@@ -101,6 +101,27 @@ func TestUploadSecurityHardening(t *testing.T) {
 		if resp.StatusCode != 400 {
 			t.Errorf("Expected 400 for invalid magic bytes, got %d", resp.StatusCode)
 		}
+
+		buf := new(bytes.Buffer)
+		w := zip.NewWriter(buf)
+		f, _ := w.Create("page1.jpg")
+		f.Write([]byte("fake data"))
+		w.Close()
+		cbzData := buf.Bytes()
+
+		body2 := new(bytes.Buffer)
+		writer2 := multipart.NewWriter(body2)
+		part2, _ := writer2.CreateFormFile("book", "valid.cbz")
+		part2.Write(cbzData)
+		writer2.Close()
+
+		req2 := httptest.NewRequest("POST", "/api/upload", body2)
+		req2.Header.Set("Content-Type", writer2.FormDataContentType())
+
+		resp2, _ := app.Test(req2)
+		if resp2.StatusCode != 200 {
+			t.Errorf("Expected 200 for valid CBZ magic bytes, got %d", resp2.StatusCode)
+		}
 	})
 }
 

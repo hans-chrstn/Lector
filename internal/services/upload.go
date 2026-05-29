@@ -14,6 +14,9 @@ func ProcessLocalFile(path string) (*models.Document, error) {
 	if ext == ".epub" {
 		return processEPUB(path)
 	}
+	if ext == ".cbz" || ext == ".cbr" {
+		return processComic(path)
+	}
 	return nil, fmt.Errorf("unsupported format: %s", ext)
 }
 
