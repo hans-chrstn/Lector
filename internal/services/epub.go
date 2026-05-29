@@ -110,6 +110,13 @@ func processEPUB(path string) (*models.Document, error) {
 	}
 	defer r.Close()
 
+	for _, f := range r.File {
+		fPath := filepath.ToSlash(f.Name)
+		if strings.Contains(fPath, "..") || strings.HasPrefix(fPath, "/") {
+			return nil, fmt.Errorf("security: invalid file path in epub: %s", fPath)
+		}
+	}
+
 	opfPath := ""
 	for _, f := range r.File {
 		if f.Name == "META-INF/container.xml" {
