@@ -4,46 +4,63 @@ Lector is a neutral, open-source document management and reading application. It
 
 ---
 
-## Disclaimer and Terms of Use
+## Security and Terms
 
-### 1. Neutral Tool Policy
-Lector is a neutral document management tool. It does not provide, host, or distribute any content. The developers of Lector do not provide any site-specific scraping plugins or tools intended to bypass paywalls or access copyrighted material without authorization. Users are solely responsible for the legality of the content they import into Lector and the plugins they choose to install and execute.
+Lector is a neutral tool. It does not provide, host, or distribute any content. Users are solely responsible for the legality of the content they import and the plugins they choose to install. For full details, see [DISCLAIMER.md](DISCLAIMER.md).
 
-### 2. No Endorsement
-The inclusion of a plugin system is intended for legitimate customization and interoperability. The developers of Lector do not endorse, support, or encourage the use of Lector for any activities that violate copyright laws or the terms of service of any third-party websites.
+---
 
-### 3. Limitation of Liability
-The software is provided "as is", without warranty of any kind. In no event shall the authors or copyright holders be liable for any claim, damages, or other liability arising from the use of the software by end-users, including the use of third-party plugins.
+## Deployment
 
-### 4. DMCA Compliance
-Lector complies with the Digital Millennium Copyright Act (DMCA). If you believe that your copyrighted work has been infringed by the software itself (the core reader engine), please contact the maintainers. Note that Lector maintainers cannot control or remove content or plugins hosted on third-party systems or installed locally by users.
+Lector is designed to be easily deployed via Docker. It runs as an unprivileged user for maximum security.
+
+### Docker Environment Variables
+
+| Variable | Description | Default |
+| :--- | :--- | :--- |
+| `AUTH_USER` | Username for Basic Authentication | (None) |
+| `AUTH_PASSWORD` | Password for Basic Authentication | (None) |
+| `MAX_UPLOAD_SIZE` | Maximum upload size in MB | `100` |
+| `DATABASE_PATH` | Path to the SQLite database file | `/app/data/lector.db` |
+| `CORS_ALLOW_ORIGINS` | Permitted origins for CORS | (Same-origin only) |
+| `PORT` | Port to listen on | `3000` |
+
+### Building and Running
+
+```bash
+docker build -t lector .
+docker run -p 3000:3000 \
+  -e AUTH_USER=admin \
+  -e AUTH_PASSWORD=yourpassword \
+  -v lector_data:/app/data \
+  lector
+```
 
 ---
 
 ## Plugin API Documentation
 
-Lector provides a powerful Lua-based API for extending the application's capabilities. All plugins run in a secure sandbox and must explicitly request "Capabilities" to access sensitive functions.
+Lector plugins use Lua to extend the application. All plugins run in a secure sandbox and must request capabilities.
 
 ### Security and Capabilities
 
 Plugins must enable capabilities using `app.enable_capability(name)` before they can be used.
 
-| Capability    | Description                                                                |
-| :------------ | :------------------------------------------------------------------------- |
-| `ui`          | Access to UI extension APIs (`add_tab`, `add_section`, `add_action`, etc.) |
-| `theming`     | Access to `app.ui.add_style` for custom CSS injection                      |
-| `network`     | Access to `http_get` and domain permission management                      |
-| `storage`     | Access to `app.store` for persistent key-value data                        |
-| `fs`          | Access to the jailed file system (`fs.*`)                                  |
-| `source`      | Required for plugins that act as document sources (Search, Get Document)   |
-| `catalog`     | Required to appear in the global discovery/search interface                |
-| `background`  | Access to `app.spawn` and `app.sleep` for long-running tasks               |
-| `interaction` | Access to `app.rpc` for inter-plugin communication                         |
+| Capability | Description |
+| :--- | :--- |
+| `ui` | Access to UI extension APIs (`add_tab`, `add_section`, etc.) |
+| `theming` | Access to `app.ui.add_style` for custom CSS |
+| `network` | Access to network functions and domain permissions |
+| `storage` | Access to the persistent key-value store and jailed filesystem |
+| `source` | Required for document provider plugins (Search/Get Document) |
+| `catalog` | Required to appear in the global Discovery/Search interface |
+| `background` | Access to background tasks (`app.spawn`, `app.sleep`) |
+| `interaction` | Access to `app.rpc` for inter-plugin communication |
 
 ### Global Functions
 
 #### `print(message: string)`
-Logs a message to the Lector server terminal with a timestamp and plugin name.
+Logs a timestamped message to the server terminal.
 
 #### `url_encode(str: string) -> string`
 Returns a URL-encoded version of the string.
@@ -52,70 +69,88 @@ Returns a URL-encoded version of the string.
 Safely joins a base URL and a relative path.
 
 #### `css_select(html: string, selector: string) -> table[]`
-Parses HTML and returns a list of elements matching the CSS selector. Each element is a table:
-- `text`: Inner text of the element.
-- `html`: Inner HTML of the element.
-- `href`: Value of the `href` attribute (if any).
-- `attrs`: Table of all attributes.
+Parses HTML and returns matching elements. Each element has: `text`, `html`, `href`, and `attrs`.
 
 #### `http_get(url: string, [referer: string, [is_ajax: boolean]]) -> string`
-Fetches a URL and returns the raw HTML/body.
-- **Security**: Requires `network` capability and a matching permission via `app.add_permission`.
-- **SSRF Protection**: Blocked from accessing private/local subnets.
+Performs a GET request. Requires `network` capability and domain permission.
+
+#### `http_post(url: string, body: string, [referer: string, [is_ajax: boolean]]) -> string`
+Performs a POST request. Requires `network` capability and domain permission.
+
+#### `string.contains(str: string, substr: string) -> boolean`
+Returns true if the string contains the substring.
 
 ---
 
-## app Namespace
+### app Namespace
 
 #### `app.enable_capability(name: string)`
-Enables a specific capability for the plugin.
+Enables a specific security capability.
 
 #### `app.add_permission(domain: string)`
-Grants the plugin access to a specific network domain. Requires `network` capability.
+Grants access to a network domain (use `*` for all). Requires `network`.
 
 #### `app.add_section(id: string, label: string)`
-Adds a new section to the sidebar. Requires `ui` capability.
+Adds a sidebar section. Requires `ui`.
 
 #### `app.add_tab(id: string, label: string, icon: string, section_id: string, component: string)`
-Adds a new tab to a section. `component` is usually `"dynamic"`.
+Adds a sidebar tab. Requires `ui`.
 
-#### `app.rpc(target_plugin: string, method: string, [args_json: string]) -> string, error`
-Calls a function in another plugin. Requires `interaction` capability.
+#### `app.add_action(context: string, label: string, method: string, [icon: string])`
+Adds an action button to the UI. Requires `ui`.
+
+#### `app.rpc(target_plugin: string, method: string, [args_json: string]) -> string`
+Calls a function in another plugin. Requires `interaction`.
 
 #### `app.log(message: string, [level: string])`
-Structured logging. `level` defaults to `"INFO"`.
+Logs a message (INFO, WARN, ERROR).
 
 #### `app.spawn(func_name: string, [args_json: string])`
-Starts a background thread. Requires `background` capability.
+Starts a background thread. Requires `background`.
+
+#### `app.sleep(ms: number)`
+Pauses execution. Use only in spawned threads. Requires `background`.
 
 #### `app.store.set(key: string, value: string)`
-Stores a string permanently. Requires `storage` capability.
+Saves a string permanently in the database. Requires `storage`.
+
+#### `app.store.get(key: string) -> string | nil`
+Retrieves a stored string. Requires `storage`.
 
 ---
 
-## doc Namespace
+### app.ui Namespace
+
+#### `app.ui.add_style(css: string)`
+Injects custom CSS into the frontend. Requires `theming`.
+
+#### `app.ui.set_override(key: string, values: table)`
+Overrides internal UI configurations. Requires `ui`.
+
+---
+
+### doc Namespace
 
 #### `doc.get_chapters(doc_id: number) -> table[]`
-Returns a list of chapters for a document.
+Returns list of chapters (`id`, `title`, `url`, `status`).
 
 #### `doc.update_chapter_content(chapter_id: number, content: string)`
-Updates a chapter's content.
+Saves chapter text to the database.
 
 #### `doc.update_metadata(doc_id: number, metadata: table)`
-Updates document fields: `synopsis`, `genres`, `status`, `cover_url`.
+Updates synopsis, genres, status, or cover.
 
 #### `doc.clean(html: string, [title: string]) -> string`
-Runs Lector's high-performance cleaner to strip ads and junk.
+Strips ads and junk from HTML using Lector's high-performance cleaner.
 
 ---
 
-## fs Namespace (Jailed)
+### fs Namespace (Jailed)
 
-All `fs` functions are restricted to the plugin's private directory: `/app/data/plugins/<plugin_name>/`. Requires `fs` capability.
+All `fs` functions are restricted to `/app/data/plugins/<plugin_name>/`. Requires `storage`.
 
-- `fs.read(path: string) -> string`
-- `fs.write(path: string, content: string)`
-- `fs.list(path: string) -> table[]`
-- `fs.delete(path: string)`
-- `fs.exists(path: string) -> boolean`
-- `fs.mkdir(path: string)`
+#### `fs.read_file(path: string) -> string | nil`
+Reads a file from the jailed directory.
+
+#### `fs.write_file(path: string, content: string) -> boolean`
+Writes a file to the jailed directory.
