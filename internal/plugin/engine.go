@@ -91,6 +91,8 @@ func NewLuaPlugin(path string) (*LuaPlugin, error) {
 	defer cancel()
 	L.SetContext(ctx)
 
+	L.SetMx(1000000)
+
 	if err := L.DoFile(path); err != nil {
 		return nil, err
 	}

@@ -39,6 +39,7 @@ func RegisterRoutes(app *fiber.App, plugins map[string]*plugin.LuaPlugin) {
 	api.Get("/discovery/search", h.Search)
 
 	api.Get("/documents", h.GetDocuments)
+	api.Get("/documents/search", h.SearchLibrary)
 	api.Post("/documents/ensure", h.EnsureDocument)
 	api.Get("/documents/:id", h.GetDocumentByID)
 	api.Post("/documents/:id/library", h.ToggleLibrary)

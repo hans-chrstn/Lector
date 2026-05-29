@@ -42,5 +42,49 @@ func InitDB(path string) {
 	}
 
 	DB.AutoMigrate(&models.Document{}, &models.Chapter{}, &models.ReadingProgress{}, &models.Group{}, &models.CacheItem{}, &models.Bookmark{}, &models.Note{}, &models.Plugin{})
+
+	setupFTS(DB)
+
 	log.Println("Database initialized in Silent Mode")
+}
+
+func setupFTS(db *gorm.DB) {
+	if err := db.Exec(`CREATE VIRTUAL TABLE IF NOT EXISTS document_search USING fts5(
+		id UNINDEXED,
+		title,
+		author,
+		genres,
+		synopsis,
+		content='documents',
+		content_rowid='id'
+	)`).Error; err != nil {
+		log.Printf("[DB] Failed to create FTS table: %v", err)
+		return
+	}
+
+	triggers := []string{
+		`DROP TRIGGER IF EXISTS documents_ai`,
+		`CREATE TRIGGER documents_ai AFTER INSERT ON documents BEGIN
+			INSERT INTO document_search(rowid, title, author, genres, synopsis) 
+			VALUES (new.id, new.title, new.author, new.genres, new.synopsis);
+		END`,
+		`DROP TRIGGER IF EXISTS documents_ad`,
+		`CREATE TRIGGER documents_ad AFTER DELETE ON documents BEGIN
+			INSERT INTO document_search(document_search, rowid, title, author, genres, synopsis) 
+			VALUES('delete', old.id, old.title, old.author, old.genres, old.synopsis);
+		END`,
+		`DROP TRIGGER IF EXISTS documents_au`,
+		`CREATE TRIGGER documents_au AFTER UPDATE ON documents BEGIN
+			INSERT INTO document_search(document_search, rowid, title, author, genres, synopsis) 
+			VALUES('delete', old.id, old.title, old.author, old.genres, old.synopsis);
+			INSERT INTO document_search(rowid, title, author, genres, synopsis) 
+			VALUES (new.id, new.title, new.author, new.genres, new.synopsis);
+		END`,
+	}
+
+	for _, q := range triggers {
+		if err := db.Exec(q).Error; err != nil {
+			log.Printf("[DB] Failed to setup FTS trigger: %v", err)
+		}
+	}
 }

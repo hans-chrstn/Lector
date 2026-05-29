@@ -68,6 +68,11 @@ export const api = {
 	async getDocuments(archived = false): Promise<Document[]> {
 		return fetch(`${getBase()}/api/documents?archived=${archived}`).then((r) => r.json());
 	},
+	async searchLibrary(query: string): Promise<Document[]> {
+		return fetch(`${getBase()}/api/documents/search?q=${encodeURIComponent(query)}`).then((r) =>
+			r.json()
+		);
+	},
 	async getDocument(id: number): Promise<Document> {
 		return fetch(`${getBase()}/api/documents/${id}`).then((r) => r.json());
 	},

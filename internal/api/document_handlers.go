@@ -134,6 +134,26 @@ func (h *API) EnsureDocument(c *fiber.Ctx) error {
 	return c.JSON(doc)
 }
 
+func (h *API) SearchLibrary(c *fiber.Ctx) error {
+	query := c.Query("q")
+	if query == "" {
+		return c.JSON([]models.Document{})
+	}
+
+	var documents []models.Document
+	err := db.DB.Raw(`
+		SELECT d.* FROM documents d
+		JOIN document_search ds ON d.id = ds.rowid
+		WHERE document_search MATCH ?
+		ORDER BY rank`, query+"*").Scan(&documents).Error
+
+	if err != nil {
+		db.DB.Where("title LIKE ? OR author LIKE ? OR genres LIKE ?", "%"+query+"%", "%"+query+"%", "%"+query+"%").Find(&documents)
+	}
+
+	return c.JSON(documents)
+}
+
 func (h *API) GetDocumentByID(c *fiber.Ctx) error {
 	id, _ := strconv.Atoi(c.Params("id"))
 	doc, err := h.DocumentService.GetByID(uint(id))

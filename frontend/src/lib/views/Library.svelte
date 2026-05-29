@@ -1,11 +1,22 @@
 <script lang="ts">
-	import { FolderPlus, CheckCircle2, Filter, Grid3X3, Upload, Ghost } from 'lucide-svelte';
+	import {
+		FolderPlus,
+		CheckCircle2,
+		Filter,
+		Grid3X3,
+		List,
+		Upload,
+		Ghost,
+		Search,
+		X
+	} from 'lucide-svelte';
 	import DocumentGridItem from '../components/DocumentGridItem.svelte';
+	import DocumentListItem from '../components/DocumentListItem.svelte';
 	import BatchToolbar from '../components/BatchToolbar.svelte';
 	import BasePage from '../components/base/BasePage.svelte';
 	import { clsx } from 'clsx';
 	import { SvelteSet } from 'svelte/reactivity';
-	import type { Document, Group } from '$lib/services/api';
+	import { type Document, type Group } from '$lib/services/api';
 
 	interface Props {
 		documents: Document[];
@@ -35,11 +46,21 @@
 	let selectedGroupId = $state(0);
 	let markMode = $state(false);
 	let showArchived = $state(false);
+	let viewMode = $state<'grid' | 'list'>('grid');
+	let searchActive = $state(false);
+	let searchQuery = $state('');
 	let selectedIds = new SvelteSet<number>();
 	let fileInput: HTMLInputElement;
 
 	let filteredDocuments = $derived(
-		(documents || []).filter((n) => selectedGroupId === 0 || n.group_id === selectedGroupId)
+		(documents || []).filter((n) => {
+			const matchesGroup = selectedGroupId === 0 || n.group_id === selectedGroupId;
+			const matchesSearch =
+				!searchQuery ||
+				n.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+				(n.author && n.author.toLowerCase().includes(searchQuery.toLowerCase()));
+			return matchesGroup && matchesSearch;
+		})
 	);
 
 	function toggleSelect(id: number) {
@@ -97,7 +118,10 @@
 		</button>
 		<button
 			class={clsx('icon-btn', markMode && 'active')}
-			onclick={() => (markMode = !markMode)}
+			onclick={() => {
+				markMode = !markMode;
+				if (!markMode) selectedIds.clear();
+			}}
 			title="Selection Mode"
 		>
 			<CheckCircle2 size={20} />
@@ -138,8 +162,39 @@
 			</div>
 
 			<div class="display-opts">
-				<button class="icon-btn-small"><Grid3X3 size={16} /></button>
-				<button class="icon-btn-small"><Filter size={16} /></button>
+				{#if searchActive}
+					<div class="search-input-wrapper">
+						<Search size={14} class="search-icon" />
+						<input type="text" placeholder="Search library..." bind:value={searchQuery} />
+						<button
+							class="clear-search"
+							onclick={() => {
+								searchQuery = '';
+								searchActive = false;
+							}}
+						>
+							<X size={14} />
+						</button>
+					</div>
+				{/if}
+				<button
+					class={clsx('icon-btn-small', searchActive && 'active')}
+					onclick={() => (searchActive = !searchActive)}
+					title="Filter/Search"
+				>
+					<Filter size={16} />
+				</button>
+				<button
+					class="icon-btn-small"
+					onclick={() => (viewMode = viewMode === 'grid' ? 'list' : 'grid')}
+					title={viewMode === 'grid' ? 'Switch to List' : 'Switch to Grid'}
+				>
+					{#if viewMode === 'grid'}
+						<List size={16} />
+					{:else}
+						<Grid3X3 size={16} />
+					{/if}
+				</button>
 			</div>
 		</div>
 
@@ -153,7 +208,7 @@
 		/>
 	{/snippet}
 
-	<div class="grid">
+	<div class={clsx(viewMode === 'grid' ? 'grid' : 'list')}>
 		{#each filteredDocuments as document (document.id)}
 			<div
 				class={clsx(
@@ -178,14 +233,26 @@
 					}
 				}}
 			>
-				<DocumentGridItem
-					title={document.title}
-					cover_url={document.cover_url}
-					meta={document.source}
-					read_chapters={document.read_chapters}
-					total_chapters={document.total_chapters}
-					onclick={() => !markMode && onOpenDocument(document)}
-				/>
+				{#if viewMode === 'grid'}
+					<DocumentGridItem
+						title={document.title}
+						cover_url={document.cover_url}
+						meta={document.source}
+						read_chapters={document.read_chapters}
+						total_chapters={document.total_chapters}
+						onclick={() => !markMode && onOpenDocument(document)}
+					/>
+				{:else}
+					<DocumentListItem
+						title={document.title}
+						cover_url={document.cover_url}
+						meta={document.source}
+						is_local={document.is_local}
+						read_chapters={document.read_chapters}
+						total_chapters={document.total_chapters}
+						onclick={() => !markMode && onOpenDocument(document)}
+					/>
+				{/if}
 				{#if markMode}
 					<div class="mark-overlay">
 						<div class={clsx('mark-indicator', selectedIds.has(document.id) && 'checked')}>
@@ -199,8 +266,12 @@
 		{:else}
 			<div class="empty-state">
 				<Ghost size={40} class="empty-icon" />
-				<h3>Your library is empty</h3>
-				<p>Upload a file or start searching to build your collection.</p>
+				<h3>{searchQuery ? 'No results found' : 'Your library is empty'}</h3>
+				<p>
+					{searchQuery
+						? 'Try a different search term.'
+						: 'Upload a file or start searching to build your collection.'}
+				</p>
 			</div>
 		{/each}
 	</div>
@@ -230,7 +301,7 @@
 	.icon-btn.active {
 		color: var(--primary);
 		border-color: var(--primary);
-		background: rgba(59, 130, 246, 0.1);
+		background: rgba(var(--primary-rgb), 0.1);
 	}
 
 	.filter-bar {
@@ -280,7 +351,46 @@
 
 	.display-opts {
 		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+	}
+
+	.search-input-wrapper {
+		display: flex;
+		align-items: center;
+		background: var(--bg-surface-hover);
+		border: 1px solid var(--border-main);
+		border-radius: 8px;
+		padding: 0 0.5rem;
 		gap: 0.5rem;
+		height: 32px;
+	}
+
+	.search-input-wrapper input {
+		background: none;
+		border: none;
+		color: var(--text-main);
+		font-size: 0.75rem;
+		width: 150px;
+		outline: none;
+	}
+
+	.search-icon {
+		color: var(--text-dim);
+	}
+
+	.clear-search {
+		background: none;
+		border: none;
+		color: var(--text-dim);
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		padding: 2px;
+	}
+
+	.clear-search:hover {
+		color: var(--text-main);
 	}
 
 	.icon-btn-small {
@@ -289,16 +399,32 @@
 		color: var(--text-dim);
 		cursor: pointer;
 		padding: 0.25rem;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 6px;
+		transition: all 0.2s;
 	}
 
 	.icon-btn-small:hover {
 		color: var(--text-main);
+		background: var(--bg-surface-hover);
+	}
+
+	.icon-btn-small.active {
+		color: var(--primary);
 	}
 
 	.grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
 		gap: 2rem;
+	}
+
+	.list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
 	}
 
 	.card-wrapper {
@@ -351,6 +477,9 @@
 		.grid {
 			grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
 			gap: 1rem;
+		}
+		.search-input-wrapper input {
+			width: 100px;
 		}
 	}
 </style>
