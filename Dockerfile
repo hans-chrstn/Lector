@@ -27,7 +27,7 @@ RUN CGO_ENABLED=1 GOOS=linux go build -v -o lector cmd/lector/main.go
 
 FROM alpine:latest
 
-RUN apk add --no-cache ca-certificates musl
+RUN apk add --no-cache ca-certificates musl su-exec
 
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
@@ -44,11 +44,14 @@ COPY plugins/ ./plugins/
 
 RUN chown -R appuser:appgroup /app/plugins
 
-USER appuser
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
 EXPOSE 3000
 
 ENV NODE_ENV=production
 ENV DATABASE_PATH=/app/data/lector.db
+
+ENTRYPOINT ["/app/entrypoint.sh"]
 
 CMD ["./lector"]
