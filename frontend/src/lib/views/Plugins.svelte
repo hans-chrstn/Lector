@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { api, type PluginManifest } from '$lib/services/api';
+	import { toast } from '$lib/services/toast.svelte';
 	import {
 		Upload,
 		Trash2,
@@ -40,8 +41,9 @@
 		try {
 			await api.reorderPlugins(newItems.map((i: any) => i.name));
 			await onRefresh();
-		} catch (err) {
-			console.error('Failed to persist plugin order:', err);
+			toast.success('Plugin order saved');
+		} catch {
+			toast.error('Failed to save plugin order');
 		}
 	}
 	let loading = $state(false);
@@ -65,6 +67,9 @@
 		try {
 			await api.uploadPlugin(file);
 			await onRefresh();
+			toast.success('Plugin installed successfully');
+		} catch {
+			toast.error('Failed to install plugin');
 		} finally {
 			loading = false;
 		}
@@ -79,6 +84,9 @@
 		try {
 			await api.deletePlugin(pluginToDelete);
 			await onRefresh();
+			toast.success('Plugin deleted');
+		} catch {
+			toast.error('Failed to delete plugin');
 		} finally {
 			loading = false;
 		}
@@ -100,8 +108,9 @@
 		try {
 			await api.togglePlugin(name);
 			await onRefresh();
-		} catch (err) {
-			console.error('Failed to toggle plugin:', err);
+			toast.success(`Plugin ${name} updated`);
+		} catch {
+			toast.error('Failed to update plugin status');
 			await onRefresh();
 		} finally {
 			loading = false;
@@ -143,11 +152,21 @@
 						<FileCode size={24} class={plugin.is_enabled ? 'text-primary' : 'text-muted'} />
 					</div>
 					<div class="plugin-info">
-						<h3>{plugin.name}</h3>
+						<div class="title-row">
+							<h3>{plugin.name}</h3>
+							{#if plugin.is_verified}
+								<span title="Official Verified Plugin">
+									<ShieldCheck size={16} class="text-verified" />
+								</span>
+							{/if}
+						</div>
 						<div class="status-tags">
 							<span class={clsx('tag', plugin.is_enabled ? 'active' : 'inactive')}>
 								{plugin.is_enabled ? 'Active' : 'Disabled'}
 							</span>
+							{#if !plugin.is_verified}
+								<span class="tag unverified">Unverified</span>
+							{/if}
 						</div>
 					</div>
 					<div class="card-actions">
@@ -315,12 +334,26 @@
 	.plugin-info {
 		flex: 1;
 	}
+	.title-row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin-bottom: 0.25rem;
+	}
 	.plugin-info h3 {
-		margin: 0 0 0.25rem;
+		margin: 0;
 		font-size: 1.1rem;
 		font-weight: 700;
 		text-transform: capitalize;
 		color: var(--text-main);
+	}
+	.text-verified {
+		color: #3b82f6;
+	}
+	.tag.unverified {
+		background: #f59e0b15;
+		color: #f59e0b;
+		border: 1px solid #f59e0b30;
 	}
 	.status-tags {
 		display: flex;

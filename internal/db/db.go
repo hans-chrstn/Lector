@@ -46,7 +46,7 @@ func InitDB(path string) {
 		os.Chmod(path, 0600)
 	}
 
-	DB.AutoMigrate(&models.Document{}, &models.Chapter{}, &models.ReadingProgress{}, &models.Group{}, &models.CacheItem{}, &models.Bookmark{}, &models.Note{}, &models.Plugin{})
+	DB.AutoMigrate(&models.Document{}, &models.Chapter{}, &models.ReadingProgress{}, &models.Group{}, &models.CacheItem{}, &models.Bookmark{}, &models.Note{}, &models.Plugin{}, &models.LibraryPath{})
 
 	setupFTS(DB)
 
@@ -54,7 +54,13 @@ func InitDB(path string) {
 }
 
 func setupFTS(db *gorm.DB) {
-	if err := db.Exec(`CREATE VIRTUAL TABLE IF NOT EXISTS document_search USING fts5(
+	var ftsCheck int
+	err := db.Raw("SELECT count(*) FROM sqlite_master WHERE name='document_search'").Scan(&ftsCheck).Error
+	if err == nil && ftsCheck > 0 {
+		return
+	}
+
+	if err := db.Exec(`CREATE VIRTUAL TABLE document_search USING fts5(
 		id UNINDEXED,
 		title,
 		author,
@@ -63,7 +69,7 @@ func setupFTS(db *gorm.DB) {
 		content='documents',
 		content_rowid='id'
 	)`).Error; err != nil {
-		log.Printf("[DB] Failed to create FTS table: %v", err)
+		log.Printf("[DB] FTS5 search module not available on this system. Falling back to standard queries.")
 		return
 	}
 
@@ -88,8 +94,6 @@ func setupFTS(db *gorm.DB) {
 	}
 
 	for _, q := range triggers {
-		if err := db.Exec(q).Error; err != nil {
-			log.Printf("[DB] Failed to setup FTS trigger: %v", err)
-		}
+		db.Exec(q)
 	}
 }

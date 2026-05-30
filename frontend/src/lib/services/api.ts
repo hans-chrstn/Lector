@@ -219,6 +219,24 @@ export const api = {
 	async getBookmarks(documentId: number): Promise<Bookmark[]> {
 		return fetch(`${getBase()}/api/documents/${documentId}/bookmarks`).then((r) => r.json());
 	},
+	async getLibraryPaths(): Promise<
+		{ id: number; path: string; pattern: string; is_system: boolean }[]
+	> {
+		return fetch(`${getBase()}/api/library/paths`).then((r) => r.json());
+	},
+	async addLibraryPath(path: string, pattern: string): Promise<void> {
+		await fetch(`${getBase()}/api/library/paths`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ path, pattern })
+		});
+	},
+	async deleteLibraryPath(id: number): Promise<void> {
+		await fetch(`${getBase()}/api/library/paths/${id}`, { method: 'DELETE' });
+	},
+	async scanLibrary(): Promise<void> {
+		await fetch(`${getBase()}/api/library/scan`, { method: 'POST' });
+	},
 	async addBookmark(documentId: number, chapterId: number, title: string): Promise<void> {
 		await fetch(`${getBase()}/api/bookmarks`, {
 			method: 'POST',

@@ -3,7 +3,6 @@ package plugin
 import (
 	"fmt"
 	"net/url"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -33,7 +32,7 @@ func (s *LuaPlugin) urlEncode(L *lua.LState) int {
 }
 
 func (s *LuaPlugin) luaPrint(L *lua.LState) int {
-	name := strings.TrimSuffix(filepath.Base(s.Path), ".lua")
+	name := s.Name
 	timestamp := time.Now().Format("15:04:05")
 	fmt.Printf("[%s] [%s] %s\n", timestamp, name, L.CheckString(1))
 	return 0

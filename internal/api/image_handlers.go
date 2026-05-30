@@ -21,12 +21,12 @@ func (h *API) ProxyImage(c *fiber.Ctx) error {
 	if imgURL == "" {
 		return c.Status(400).SendString("Missing url")
 	}
-	if strings.HasPrefix(imgURL, "/uploads/") || strings.HasPrefix(imgURL, "uploads/") {
-		cleanPath := filepath.Clean(strings.TrimPrefix(imgURL, "/"))
-		if !strings.HasPrefix(cleanPath, "uploads/") && !strings.HasPrefix(cleanPath, "uploads\\") {
+	if strings.HasPrefix(imgURL, "/uploads/") || strings.HasPrefix(imgURL, "uploads/") || !strings.Contains(imgURL, "://") {
+		absPath, _ := filepath.Abs(filepath.Clean(strings.TrimPrefix(imgURL, "/")))
+		if !services.IsPathAuthorized(absPath) {
 			return c.Status(403).SendString("Security: Access denied")
 		}
-		return c.SendFile(cleanPath)
+		return c.SendFile(absPath)
 	}
 	if imgURL == "MISSING" {
 		return c.Status(404).SendString("No image URL provided")

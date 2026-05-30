@@ -48,12 +48,14 @@ export interface Plugin {
 	id: number;
 	name: string;
 	is_enabled: boolean;
+	tabs?: { id: string; label: string; icon: string; section_id: string; component: string }[];
 }
 
 export interface PluginManifest {
 	name: string;
 	is_enabled: boolean;
 	is_loaded: boolean;
+	is_verified: boolean;
 	tabs: {
 		id: string;
 		label: string;

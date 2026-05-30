@@ -4,6 +4,7 @@ export const baseManifest: PluginManifest = {
 	name: 'system',
 	is_enabled: true,
 	is_loaded: true,
+	is_verified: true,
 	sections: [{ id: 'workspace', label: 'Workspace' }],
 	tabs: [
 		{
@@ -16,7 +17,7 @@ export const baseManifest: PluginManifest = {
 		{
 			id: 'sys:history',
 			label: 'History',
-			icon: 'Clock',
+			icon: 'History',
 			section_id: 'workspace',
 			component: 'history'
 		},

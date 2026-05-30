@@ -9,7 +9,6 @@ services:
     environment:
       - DATABASE_PATH=/app/data/lector.db
       - PORT=3000
-      - DOWNLOAD_WORKERS=10
       - MAX_UPLOAD_SIZE=100
       # - CORS_ALLOW_ORIGINS=*
       # - AUTH_USER=admin

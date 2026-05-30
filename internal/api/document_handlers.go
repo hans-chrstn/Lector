@@ -271,6 +271,13 @@ func (h *API) GetArchiveImage(c *fiber.Ctx) error {
 		return c.Status(500).SendString(err.Error())
 	}
 
+	var doc models.Document
+	db.DB.First(&doc, uint(id))
+	absPath, _ := filepath.Abs(doc.LocalPath)
+	if !services.IsPathAuthorized(absPath) {
+		return c.Status(403).SendString("Security: Access denied")
+	}
+
 	if contentType == "" {
 		contentType = "image/jpeg"
 	}

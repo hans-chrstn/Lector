@@ -39,6 +39,15 @@
 	}: Props = $props();
 
 	let coverInput: HTMLInputElement;
+	let synopsisEl = $state<HTMLElement>();
+	let isExpanded = $state(false);
+	let isTruncated = $state(false);
+
+	$effect(() => {
+		if (synopsisEl && document.synopsis) {
+			isTruncated = synopsisEl.scrollHeight > synopsisEl.clientHeight;
+		}
+	});
 </script>
 
 <div class="hero">
@@ -97,7 +106,20 @@
 		{#if document.synopsis}
 			<div class="synopsis-box">
 				<h3>Synopsis</h3>
-				<p class="synopsis">{document.synopsis}</p>
+				<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+				<!-- svelte-ignore a11y_click_events_have_key_events -->
+				<p
+					bind:this={synopsisEl}
+					class={clsx('synopsis', isExpanded && 'expanded', isTruncated && 'clickable')}
+					onclick={() => isTruncated && (isExpanded = !isExpanded)}
+				>
+					{document.synopsis}
+				</p>
+				{#if isTruncated}
+					<button class="expand-toggle" onclick={() => (isExpanded = !isExpanded)}>
+						{isExpanded ? 'Show less' : 'Show more'}
+					</button>
+				{/if}
 			</div>
 		{/if}
 
@@ -293,12 +315,47 @@
 		font-size: 1.0625rem;
 		line-height: 1.7;
 		color: var(--text-muted);
-		margin-bottom: 3.5rem;
+		margin-bottom: 0.5rem;
 		display: -webkit-box;
 		-webkit-line-clamp: 5;
 		line-clamp: 5;
 		-webkit-box-orient: vertical;
 		overflow: hidden;
+		transition: all 0.3s ease;
+	}
+
+	.synopsis.clickable {
+		cursor: pointer;
+	}
+
+	.synopsis.clickable:hover {
+		color: var(--text-main);
+	}
+
+	.synopsis.expanded {
+		-webkit-line-clamp: unset;
+		line-clamp: unset;
+		display: block;
+		margin-bottom: 1rem;
+	}
+
+	.expand-toggle {
+		background: none;
+		border: none;
+		color: var(--primary);
+		font-size: 0.8125rem;
+		font-weight: 800;
+		padding: 0;
+		cursor: pointer;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		margin-bottom: 3.5rem;
+		transition: color 0.2s;
+	}
+
+	.expand-toggle:hover {
+		color: var(--text-main);
+		text-decoration: underline;
 	}
 
 	.main-actions {

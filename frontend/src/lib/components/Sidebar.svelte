@@ -20,6 +20,7 @@
 		name: string;
 		is_enabled: boolean;
 		is_loaded: boolean;
+		is_verified: boolean;
 		tabs: Tab[];
 		sections: Section[];
 	}

@@ -2,15 +2,21 @@ package plugin
 
 import (
 	"context"
+	"crypto/ed25519"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"net/http/cookiejar"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/user/lector/internal/models"
 	lua "github.com/yuin/gopher-lua"
 )
+
+const OfficialPublicKey = "7c9e1e79268f702672a969f69792688972a969f69792688972a969f697926889"
 
 type PluginSource interface {
 	Search(query string) ([]models.SearchItem, error)
@@ -22,6 +28,7 @@ type PluginSource interface {
 
 type LuaPlugin struct {
 	L              *lua.LState
+	Name           string
 	Path           string
 	LoadedAt       time.Time
 	Client         *http.Client
@@ -35,6 +42,7 @@ type LuaPlugin struct {
 	Permissions    []string
 	Capabilities   []string
 	CSS            string
+	IsVerified     bool
 }
 
 type Action struct {
@@ -65,10 +73,11 @@ type SettingsGroup struct {
 var GlobalPlugins map[string]*LuaPlugin
 var PluginsMu sync.Mutex
 
-func NewLuaPlugin(path string) (*LuaPlugin, error) {
+func NewLuaPlugin(name, path string) (*LuaPlugin, error) {
 	L := lua.NewState()
 	s := &LuaPlugin{
 		L:              L,
+		Name:           name,
 		Path:           path,
 		Tabs:           []Tab{},
 		Sections:       []Section{},
@@ -78,6 +87,8 @@ func NewLuaPlugin(path string) (*LuaPlugin, error) {
 		Permissions:    []string{},
 		Capabilities:   []string{},
 	}
+
+	s.IsVerified = s.verifySignature()
 
 	jar, _ := cookiejar.New(nil)
 	s.Client = &http.Client{
@@ -102,6 +113,27 @@ func NewLuaPlugin(path string) (*LuaPlugin, error) {
 	}
 
 	return s, nil
+}
+
+func (s *LuaPlugin) verifySignature() bool {
+	sigPath := s.Path + ".sig"
+	sigHex, err := os.ReadFile(sigPath)
+	if err != nil {
+		return false
+	}
+
+	sig, err := hex.DecodeString(strings.TrimSpace(string(sigHex)))
+	if err != nil {
+		return false
+	}
+
+	content, err := os.ReadFile(s.Path)
+	if err != nil {
+		return false
+	}
+
+	pubKey, _ := hex.DecodeString(OfficialPublicKey)
+	return ed25519.Verify(pubKey, content, sig)
 }
 
 func (s *LuaPlugin) Validate() error {

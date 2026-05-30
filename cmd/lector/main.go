@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -100,26 +101,45 @@ func loadPlugins() map[string]*plugin.LuaPlugin {
 	pluginsMap := make(map[string]*plugin.LuaPlugin)
 	pluginDir := "plugins"
 	os.MkdirAll(pluginDir, 0755)
+
 	files, _ := os.ReadDir(pluginDir)
 	for _, file := range files {
-		if filepath.Ext(file.Name()) == ".lua" {
-			name := file.Name()[:len(file.Name())-4]
-			var p models.Plugin
-			result := db.DB.Where("name = ?", name).First(&p)
-			if result.Error != nil {
-				p = models.Plugin{Name: name, IsEnabled: true}
-				db.DB.Create(&p)
+		var name string
+		var path string
+
+		if file.IsDir() {
+			name = strings.ToLower(file.Name())
+			path = filepath.Join(pluginDir, file.Name(), "init.lua")
+			if _, err := os.Stat(path); os.IsNotExist(err) {
+				continue
 			}
-			if p.IsEnabled {
-				s, err := plugin.NewLuaPlugin(filepath.Join(pluginDir, file.Name()))
-				if err == nil {
-					pluginsMap[name] = s
-				} else {
-					log.Printf("[Plugin] Failed to load %s: %v", name, err)
-				}
+		} else if filepath.Ext(file.Name()) == ".lua" {
+			name = strings.ToLower(file.Name()[:len(file.Name())-4])
+			path = filepath.Join(pluginDir, file.Name())
+			if _, exists := pluginsMap[name]; exists {
+				continue
+			}
+		} else {
+			continue
+		}
+
+		var p models.Plugin
+		result := db.DB.Where("name = ?", name).First(&p)
+		if result.Error != nil {
+			p = models.Plugin{Name: name, IsEnabled: true}
+			db.DB.Create(&p)
+		}
+
+		if p.IsEnabled {
+			s, err := plugin.NewLuaPlugin(name, path)
+			if err == nil {
+				pluginsMap[name] = s
+				log.Printf("[Plugin] Loaded: %s (Verified: %v)", name, s.IsVerified)
 			} else {
-				log.Printf("[Plugin] Skipping disabled plugin: %s", name)
+				log.Printf("[Plugin] Failed to load %s from %s: %v", name, path, err)
 			}
+		} else {
+			log.Printf("[Plugin] Skipping disabled plugin: %s", name)
 		}
 	}
 	return pluginsMap

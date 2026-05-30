@@ -20,7 +20,7 @@ func TestLuaPlugin(t *testing.T) {
 	}
 	defer os.Remove("mock_plugin.lua")
 
-	s, err := plugin.NewLuaPlugin("mock_plugin.lua")
+	s, err := plugin.NewLuaPlugin("test", "mock_plugin.lua")
 	if err != nil {
 		t.Fatalf("Failed to load plugin: %v", err)
 	}

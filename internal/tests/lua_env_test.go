@@ -23,7 +23,7 @@ func TestLuaEnvironment(t *testing.T) {
 	}
 	defer os.Remove("test_env.lua")
 
-	_, err = plugin.NewLuaPlugin("test_env.lua")
+	_, err = plugin.NewLuaPlugin("test", "test_env.lua")
 	if err != nil {
 		t.Fatalf("Lua environment validation failed: %v", err)
 	}

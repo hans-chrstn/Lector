@@ -58,6 +58,11 @@ func RegisterRoutes(app *fiber.App, plugins map[string]*plugin.LuaPlugin) {
 	api.Delete("/history/batch", h.BatchDeleteHistory)
 	api.Delete("/history/:id", h.DeleteHistory)
 
+	api.Get("/library/paths", h.GetLibraryPaths)
+	api.Post("/library/paths", h.AddLibraryPath)
+	api.Delete("/library/paths/:id", h.DeleteLibraryPath)
+	api.Post("/library/scan", h.ScanLibrary)
+
 	api.Get("/chapters/:id", h.GetChapterByID)
 	api.Post("/chapters/:id/read", h.ToggleChapterRead)
 	api.Post("/chapters/batch", h.BatchUpdateChapters)

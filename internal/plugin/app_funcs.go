@@ -3,7 +3,6 @@ package plugin
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -66,7 +65,7 @@ func (s *LuaPlugin) HasCapability(name string) bool {
 }
 
 func (s *LuaPlugin) addPermission(L *lua.LState) int {
-	name := strings.TrimSuffix(filepath.Base(s.Path), ".lua")
+	name := s.Name
 	if !s.HasCapability("network") {
 		fmt.Printf("[Security] [%s] Blocked add_permission (Capability 'network' not enabled)\n", name)
 		return 0
@@ -79,7 +78,7 @@ func (s *LuaPlugin) addPermission(L *lua.LState) int {
 }
 
 func (s *LuaPlugin) addAction(L *lua.LState) int {
-	name := strings.TrimSuffix(filepath.Base(s.Path), ".lua")
+	name := s.Name
 	if !s.HasCapability("ui") {
 		fmt.Printf("[Security] [%s] Blocked add_action (Capability 'ui' not enabled)\n", name)
 		return 0
@@ -95,7 +94,7 @@ func (s *LuaPlugin) addAction(L *lua.LState) int {
 }
 
 func (s *LuaPlugin) uiAddStyle(L *lua.LState) int {
-	name := strings.TrimSuffix(filepath.Base(s.Path), ".lua")
+	name := s.Name
 	if !s.HasCapability("theming") {
 		fmt.Printf("[Security] [%s] Blocked ui.add_style (Capability 'theming' not enabled)\n", name)
 		return 0
@@ -108,7 +107,7 @@ func (s *LuaPlugin) uiAddStyle(L *lua.LState) int {
 }
 
 func (s *LuaPlugin) uiSetOverride(L *lua.LState) int {
-	name := strings.TrimSuffix(filepath.Base(s.Path), ".lua")
+	name := s.Name
 	if !s.HasCapability("ui") {
 		fmt.Printf("[Security] [%s] Blocked ui.set_override (Capability 'ui' not enabled)\n", name)
 		return 0
@@ -128,7 +127,7 @@ func (s *LuaPlugin) uiSetOverride(L *lua.LState) int {
 }
 
 func (s *LuaPlugin) appRPC(L *lua.LState) int {
-	name := strings.TrimSuffix(filepath.Base(s.Path), ".lua")
+	name := s.Name
 	if !s.HasCapability("interaction") {
 		fmt.Printf("[Security] [%s] Blocked app.rpc (Capability 'interaction' not enabled)\n", name)
 		L.Push(lua.LNil)
@@ -176,14 +175,14 @@ func (s *LuaPlugin) appRPC(L *lua.LState) int {
 func (s *LuaPlugin) appLog(L *lua.LState) int {
 	msg := L.CheckString(1)
 	level := L.OptString(2, "INFO")
-	name := strings.TrimSuffix(filepath.Base(s.Path), ".lua")
+	name := s.Name
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
 	fmt.Printf("%s [%s] [%s] %s\n", timestamp, strings.ToUpper(level), name, msg)
 	return 0
 }
 
 func (s *LuaPlugin) addTab(L *lua.LState) int {
-	name := strings.TrimSuffix(filepath.Base(s.Path), ".lua")
+	name := s.Name
 	if !s.HasCapability("ui") {
 		fmt.Printf("[Security] [%s] Blocked add_tab (Capability 'ui' not enabled)\n", name)
 		return 0
@@ -200,7 +199,7 @@ func (s *LuaPlugin) addTab(L *lua.LState) int {
 }
 
 func (s *LuaPlugin) addSection(L *lua.LState) int {
-	name := strings.TrimSuffix(filepath.Base(s.Path), ".lua")
+	name := s.Name
 	if !s.HasCapability("ui") {
 		fmt.Printf("[Security] [%s] Blocked add_section (Capability 'ui' not enabled)\n", name)
 		return 0
@@ -214,7 +213,7 @@ func (s *LuaPlugin) addSection(L *lua.LState) int {
 }
 
 func (s *LuaPlugin) addSettingsGroup(L *lua.LState) int {
-	name := strings.TrimSuffix(filepath.Base(s.Path), ".lua")
+	name := s.Name
 	if !s.HasCapability("ui") {
 		fmt.Printf("[Security] [%s] Blocked add_settings_group (Capability 'ui' not enabled)\n", name)
 		return 0
@@ -228,7 +227,7 @@ func (s *LuaPlugin) addSettingsGroup(L *lua.LState) int {
 }
 
 func (s *LuaPlugin) appSpawn(L *lua.LState) int {
-	name := strings.TrimSuffix(filepath.Base(s.Path), ".lua")
+	name := s.Name
 	if !s.HasCapability("background") {
 		fmt.Printf("[Security] [%s] Blocked app.spawn (Capability 'background' not enabled)\n", name)
 		return 0
@@ -237,7 +236,7 @@ func (s *LuaPlugin) appSpawn(L *lua.LState) int {
 	argsStr := L.OptString(2, "{}")
 
 	go func() {
-		newL, err := NewLuaPlugin(s.Path)
+		newL, err := NewLuaPlugin(s.Name, s.Path)
 		if err != nil {
 			fmt.Printf("[Plugin] Spawn error: Failed to initialize isolated VM: %v\n", err)
 			return
@@ -261,7 +260,7 @@ func (s *LuaPlugin) appSpawn(L *lua.LState) int {
 }
 
 func (s *LuaPlugin) appSleep(L *lua.LState) int {
-	name := strings.TrimSuffix(filepath.Base(s.Path), ".lua")
+	name := s.Name
 	if !s.HasCapability("background") {
 		fmt.Printf("[Security] [%s] Blocked app.sleep (Capability 'background' not enabled)\n", name)
 		return 0
@@ -272,7 +271,7 @@ func (s *LuaPlugin) appSleep(L *lua.LState) int {
 }
 
 func (s *LuaPlugin) storeSet(L *lua.LState) int {
-	name := strings.TrimSuffix(filepath.Base(s.Path), ".lua")
+	name := s.Name
 	if !s.HasCapability("storage") {
 		fmt.Printf("[Security] [%s] Blocked store.set (Capability 'storage' not enabled)\n", name)
 		return 0
@@ -289,7 +288,7 @@ func (s *LuaPlugin) storeSet(L *lua.LState) int {
 }
 
 func (s *LuaPlugin) storeGet(L *lua.LState) int {
-	name := strings.TrimSuffix(filepath.Base(s.Path), ".lua")
+	name := s.Name
 	if !s.HasCapability("storage") {
 		fmt.Printf("[Security] [%s] Blocked store.get (Capability 'storage' not enabled)\n", name)
 		L.Push(lua.LNil)

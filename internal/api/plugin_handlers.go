@@ -31,25 +31,22 @@ func (h *API) UploadPlugin(c *fiber.Ctx) error {
 
 	pluginDir := getPluginDir()
 	if err := os.MkdirAll(pluginDir, 0755); err != nil {
-		fmt.Printf("[Plugin] Failed to create dir %s: %v\n", pluginDir, err)
 		return c.Status(500).SendString("Failed to create plugins directory")
 	}
 
+	name := strings.ToLower(strings.TrimSuffix(file.Filename, ".lua"))
 	path := filepath.Join(pluginDir, file.Filename)
-	fmt.Printf("[Plugin] Saving uploaded plugin to: %s\n", path)
+
 	if err := c.SaveFile(file, path); err != nil {
-		fmt.Printf("[Plugin] Failed to save file %s: %v\n", path, err)
 		return c.Status(500).SendString("Failed to save file")
 	}
 
-	testPlugin, err := plugin.NewLuaPlugin(path)
+	testPlugin, err := plugin.NewLuaPlugin(name, path)
 	if err != nil || testPlugin.Validate() != nil {
 		os.Remove(path)
-		fmt.Printf("[Plugin] Invalid plugin %s: %v\n", file.Filename, err)
 		return c.Status(400).SendString(fmt.Sprintf("Invalid plugin: %v", err))
 	}
 
-	name := strings.TrimSuffix(file.Filename, ".lua")
 	h.Plugins[name] = testPlugin
 
 	var p models.Plugin
@@ -58,7 +55,6 @@ func (h *API) UploadPlugin(c *fiber.Ctx) error {
 		db.DB.Create(&p)
 	}
 
-	fmt.Printf("[Plugin] Successfully installed and loaded: %s\n", name)
 	return c.JSON(fiber.Map{"status": "success", "name": name})
 }
 
@@ -67,6 +63,7 @@ func (h *API) GetPluginsManifest(c *fiber.Ctx) error {
 		Name           string                       `json:"name"`
 		IsEnabled      bool                         `json:"is_enabled"`
 		IsLoaded       bool                         `json:"is_loaded"`
+		IsVerified     bool                         `json:"is_verified"`
 		Tabs           []plugin.Tab                 `json:"tabs"`
 		Sections       []plugin.Section             `json:"sections"`
 		SettingsGroups []plugin.SettingsGroup       `json:"settings_groups"`
@@ -82,13 +79,22 @@ func (h *API) GetPluginsManifest(c *fiber.Ctx) error {
 
 	files, _ := os.ReadDir(pluginDir)
 	for _, file := range files {
-		if filepath.Ext(file.Name()) == ".lua" {
-			name := strings.TrimSuffix(file.Name(), ".lua")
-			var p models.Plugin
-			if err := db.DB.Where("name = ?", name).First(&p).Error; err != nil {
-				p = models.Plugin{Name: name, IsEnabled: true}
-				db.DB.Create(&p)
+		var name string
+		if file.IsDir() {
+			name = strings.ToLower(file.Name())
+			if _, err := os.Stat(filepath.Join(pluginDir, file.Name(), "init.lua")); os.IsNotExist(err) {
+				continue
 			}
+		} else if filepath.Ext(file.Name()) == ".lua" {
+			name = strings.ToLower(strings.TrimSuffix(file.Name(), ".lua"))
+		} else {
+			continue
+		}
+
+		var p models.Plugin
+		if err := db.DB.Where("name = ?", name).First(&p).Error; err != nil {
+			p = models.Plugin{Name: name, IsEnabled: true}
+			db.DB.Create(&p)
 		}
 	}
 
@@ -97,38 +103,45 @@ func (h *API) GetPluginsManifest(c *fiber.Ctx) error {
 
 	manifests := []PluginManifest{}
 	for _, p := range dbPlugins {
-		path := filepath.Join(pluginDir, p.Name+".lua")
-		info, err := os.Stat(path)
+		name := strings.ToLower(p.Name)
+		var sPath string
+		var info os.FileInfo
 
-		if os.IsNotExist(err) {
-			if _, exists := h.Plugins[p.Name]; exists {
-				delete(h.Plugins, p.Name)
+		if dirInfo, err := os.Stat(filepath.Join(pluginDir, name)); err == nil && dirInfo.IsDir() {
+			sPath = filepath.Join(pluginDir, name, "init.lua")
+			info, _ = os.Stat(sPath)
+		} else if fileInfo, err := os.Stat(filepath.Join(pluginDir, name+".lua")); err == nil {
+			sPath = filepath.Join(pluginDir, name+".lua")
+			info = fileInfo
+		}
+
+		if sPath == "" {
+			if _, exists := h.Plugins[name]; exists {
+				delete(h.Plugins, name)
 			}
 			continue
 		}
 
 		if p.IsEnabled {
-			s, exists := h.Plugins[p.Name]
+			s, exists := h.Plugins[name]
 			if !exists || (info != nil && info.ModTime().After(s.LoadedAt)) {
-				if newS, err := plugin.NewLuaPlugin(path); err == nil {
+				if newS, err := plugin.NewLuaPlugin(name, sPath); err == nil {
 					newS.LoadedAt = info.ModTime()
-					h.Plugins[p.Name] = newS
-					fmt.Printf("[Plugin] %s: reloaded from disk (ModTime: %s)\n", p.Name, newS.LoadedAt.Format("15:04:05"))
-				} else {
-					fmt.Printf("[Plugin] %s: reload failed: %v\n", p.Name, err)
+					h.Plugins[name] = newS
 				}
 			}
 		} else {
-			delete(h.Plugins, p.Name)
+			delete(h.Plugins, name)
 		}
 
 		m := PluginManifest{
-			Name:      p.Name,
+			Name:      name,
 			IsEnabled: p.IsEnabled,
-			IsLoaded:  h.Plugins[p.Name] != nil,
+			IsLoaded:  h.Plugins[name] != nil,
 		}
 
-		if s, ok := h.Plugins[p.Name]; ok {
+		if s, ok := h.Plugins[name]; ok {
+			m.IsVerified = s.IsVerified
 			m.Tabs = s.Tabs
 			m.Sections = s.Sections
 			m.SettingsGroups = s.SettingsGroups
@@ -138,7 +151,6 @@ func (h *API) GetPluginsManifest(c *fiber.Ctx) error {
 			m.Capabilities = s.Capabilities
 			m.CSS = s.CSS
 		}
-
 		manifests = append(manifests, m)
 	}
 
@@ -157,16 +169,15 @@ func (h *API) ReorderPlugins(c *fiber.Ctx) error {
 		return c.Status(400).SendString("Invalid request")
 	}
 
-	fmt.Printf("[Plugins] Reordering plugins: %v\n", req)
 	for i, name := range req {
-		db.DB.Model(&models.Plugin{}).Where("name = ?", name).Update("priority", i)
+		db.DB.Model(&models.Plugin{}).Where("name = ?", strings.ToLower(name)).Update("priority", i)
 	}
 
 	return c.SendString("Reordered")
 }
 
 func (h *API) TogglePlugin(c *fiber.Ctx) error {
-	name := c.Params("name")
+	name := strings.ToLower(c.Params("name"))
 	var p models.Plugin
 	if err := db.DB.Where("name = ?", name).First(&p).Error; err != nil {
 		return c.Status(404).SendString("Plugin not found")
@@ -176,8 +187,15 @@ func (h *API) TogglePlugin(c *fiber.Ctx) error {
 	db.DB.Save(&p)
 
 	if p.IsEnabled {
-		path := filepath.Join(getPluginDir(), name+".lua")
-		s, err := plugin.NewLuaPlugin(path)
+		pluginDir := getPluginDir()
+		var sPath string
+		if _, err := os.Stat(filepath.Join(pluginDir, name, "init.lua")); err == nil {
+			sPath = filepath.Join(pluginDir, name, "init.lua")
+		} else {
+			sPath = filepath.Join(pluginDir, name+".lua")
+		}
+
+		s, err := plugin.NewLuaPlugin(name, sPath)
 		if err == nil {
 			h.Plugins[name] = s
 		}
@@ -189,24 +207,29 @@ func (h *API) TogglePlugin(c *fiber.Ctx) error {
 }
 
 func (h *API) DeletePlugin(c *fiber.Ctx) error {
-	name := c.Params("name")
+	name := strings.ToLower(c.Params("name"))
 
-	path := filepath.Join(getPluginDir(), name+".lua")
-	if err := os.Remove(path); err != nil {
-		return c.Status(500).SendString("Failed to delete file")
+	pluginDir := getPluginDir()
+	dirPath := filepath.Join(pluginDir, name)
+	filePath := filepath.Join(pluginDir, name+".lua")
+
+	if info, err := os.Stat(dirPath); err == nil && info.IsDir() {
+		os.RemoveAll(dirPath)
+	} else {
+		os.Remove(filePath)
 	}
 
 	delete(h.Plugins, name)
+	db.DB.Where("name = ?", name).Delete(&models.Plugin{})
 	return c.SendString("Deleted")
 }
 
 func (h *API) PluginRPC(c *fiber.Ctx) error {
-	name := c.Params("name")
+	name := strings.ToLower(c.Params("name"))
 	method := c.Params("method")
 
 	p, ok := h.Plugins[name]
 	if !ok {
-		fmt.Printf("[PluginRPC] Error: Plugin %s not found. Active: %v\n", name, h.GetActivePluginNames())
 		return c.Status(404).SendString("Plugin not found")
 	}
 
@@ -227,8 +250,6 @@ func (h *API) PluginRPC(c *fiber.Ctx) error {
 		if method == "get_document_actions" {
 			return c.JSON([]interface{}{})
 		}
-
-		fmt.Printf("[PluginRPC] Error: Method %s not found in plugin %s\n", method, name)
 		return c.Status(404).SendString(fmt.Sprintf("RPC method %s not found in plugin %s", method, name))
 	}
 
@@ -242,9 +263,6 @@ func (h *API) PluginRPC(c *fiber.Ctx) error {
 	p.L.SetContext(ctx)
 
 	if err := p.L.CallByParam(lua.P{Fn: fn, NRet: 1, Protect: true}, lua.LString(body)); err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
-			fmt.Printf("[Security] [%s] RPC execution timed out in %s\n", name, method)
-		}
 		return c.Status(500).SendString(fmt.Sprintf("RPC error: %v", err))
 	}
 

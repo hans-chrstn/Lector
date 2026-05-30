@@ -2,13 +2,15 @@
 	import { onMount, tick } from 'svelte';
 	import { RotateCcw, CloudCheck } from 'lucide-svelte';
 	import { clsx } from 'clsx';
-	import { api } from '$lib/services/api';
+	import { api, type PluginManifest } from '$lib/services/api';
 	import ProgressRing from '../components/ProgressRing.svelte';
 	import ReaderNav from '../components/reader/ReaderNav.svelte';
 	import ReaderSettings from '../components/reader/ReaderSettings.svelte';
 	import ReaderSidebar from '../components/reader/ReaderSidebar.svelte';
 	import ReaderNotebook from '../components/reader/ReaderNotebook.svelte';
 	import ReaderFooter from '../components/reader/ReaderFooter.svelte';
+	import { toast } from '$lib/services/toast.svelte';
+	import { X, Loader2 } from 'lucide-svelte';
 
 	interface Chapter {
 		id: number;
@@ -41,8 +43,9 @@
 		document: DocumentMeta;
 		onClose: () => void;
 		onReadChapter: (chapter: { id: number; title: string; order: number }) => void;
+		pluginManifests?: PluginManifest[];
 	}
-	let { chapter, document: doc, onClose, onReadChapter }: Props = $props();
+	let { chapter, document: doc, onClose, onReadChapter, pluginManifests = [] }: Props = $props();
 
 	let settings = $state({
 		fontSize: 18,
@@ -77,6 +80,76 @@
 	let isSpeaking = $state(false);
 	let synth: SpeechSynthesis | null = null;
 	let utterance: SpeechSynthesisUtterance | null = null;
+
+	let selectedText = $state('');
+	let selectionCoords = $state({ x: 0, y: 0 });
+	let actionResult = $state<any>(null);
+	let actionLoading = $state(false);
+
+	const selectionActions = $derived.by(() => {
+		const actions = pluginManifests.flatMap((p) =>
+			(p.actions || [])
+				.filter((a: any) => a.context === 'selection')
+				.map((a: any) => ({ ...a, plugin: p.name }))
+		);
+		console.log(
+			'[Reader] Plugins available:',
+			pluginManifests.length,
+			'Selection actions found:',
+			actions.length
+		);
+		return actions;
+	});
+
+	function handleSelectionChange() {
+		const selection = window.getSelection();
+		if (!selection || selection.isCollapsed || !selection.toString().trim()) {
+			selectedText = '';
+			return;
+		}
+
+		const text = selection.toString().trim();
+		if (text.length > 100) {
+			selectedText = '';
+			return;
+		}
+
+		const range = selection.getRangeAt(0);
+		const rect = range.getBoundingClientRect();
+
+		selectedText = text;
+		selectionCoords = {
+			x: rect.left + rect.width / 2,
+			y: rect.top
+		};
+	}
+
+	async function handleAction(pluginName: string, method: string) {
+		if (!selectedText) return;
+		const word = selectedText;
+		selectedText = '';
+
+		actionLoading = true;
+		actionResult = null;
+		try {
+			const res = await fetch(`${window.location.origin}/api/plugins/${pluginName}/rpc/${method}`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(word)
+			});
+			if (!res.ok) throw new Error(await res.text());
+			const data = await res.json();
+			if (data.error) {
+				toast.error(data.error);
+			} else {
+				actionResult = data[0] || data;
+			}
+		} catch (e: any) {
+			toast.error(e.message || 'Action failed');
+		} finally {
+			actionLoading = false;
+		}
+	}
 
 	$effect(() => {
 		if (
@@ -178,6 +251,8 @@
 		const handleExitSync = () => syncProgress();
 		const container = document.querySelector('.main-viewport');
 
+		window.document.addEventListener('selectionchange', handleSelectionChange);
+
 		const init = async () => {
 			const saved = localStorage.getItem('lector-reader-settings');
 			if (saved) {
@@ -235,6 +310,7 @@
 
 		return () => {
 			clearInterval(progressInterval);
+			window.document.removeEventListener('selectionchange', handleSelectionChange);
 			if (container) container.removeEventListener('scroll', handleScroll);
 			window.removeEventListener('pagehide', handleExitSync);
 			window.removeEventListener('beforeunload', handleExitSync);
@@ -431,6 +507,60 @@
 			<ProgressRing value={currentChapterScroll} total={100} size={20} stroke={2} />
 			<span>{currentIdxMeta + 1} / {doc.chapters.length}</span>
 		</div>
+
+		{#if selectedText && selectionActions.length > 0}
+			<div
+				class="selection-toolbar"
+				style="left: {selectionCoords.x}px; top: {selectionCoords.y}px"
+			>
+				{#each selectionActions as action (action.label)}
+					<button class="tool-btn" onclick={() => handleAction(action.plugin, action.method)}>
+						<span>{action.label}</span>
+					</button>
+				{/each}
+			</div>
+		{/if}
+
+		{#if actionResult || actionLoading}
+			<div class="definition-overlay" onclick={() => (actionResult = null)}>
+				<div class="definition-card" onclick={(e) => e.stopPropagation()}>
+					{#if actionLoading}
+						<div class="def-loader">
+							<Loader2 size={24} class="spin" />
+							<span>Processing action...</span>
+						</div>
+					{:else if actionResult}
+						<header>
+							<div class="word-meta">
+								<h2>{actionResult.word || actionResult.title || 'Result'}</h2>
+								{#if actionResult.phonetic}
+									<span class="phonetic">{actionResult.phonetic}</span>
+								{/if}
+							</div>
+							<button class="close-btn" onclick={() => (actionResult = null)}>
+								<X size={18} />
+							</button>
+						</header>
+						<div class="def-body">
+							{#if actionResult.meanings}
+								{#each actionResult.meanings as meaning, i (i)}
+									<div class="meaning">
+										<span class="part-of-speech">{meaning.partOfSpeech}</span>
+										<ul class="definitions">
+											{#each meaning.definitions.slice(0, 2) as def, j (j)}
+												<li>{def.definition}</li>
+											{/each}
+										</ul>
+									</div>
+								{/each}
+							{:else}
+								<p class="raw-result">{JSON.stringify(actionResult, null, 2)}</p>
+							{/if}
+						</div>
+					{/if}
+				</div>
+			</div>
+		{/if}
 	</div>
 {/if}
 
@@ -579,6 +709,143 @@
 	.sync-icon {
 		color: #10b981;
 		animation: fadeIn 0.3s ease;
+	}
+	.selection-toolbar {
+		position: fixed;
+		transform: translate(-50%, -120%);
+		background: var(--bg-surface);
+		border: 1px solid var(--border-main);
+		padding: 0.4rem;
+		border-radius: 10px;
+		display: flex;
+		gap: 0.5rem;
+		z-index: 9999;
+		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+		animation: flyUp 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+		pointer-events: auto;
+	}
+	.tool-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.4rem 0.8rem;
+		border-radius: 6px;
+		font-size: 0.75rem;
+		font-weight: 700;
+		color: var(--text-main);
+		white-space: nowrap;
+	}
+	.tool-btn:hover {
+		background: rgba(255, 255, 255, 0.05);
+		color: var(--primary);
+	}
+	.definition-overlay {
+		position: fixed;
+		inset: 0;
+		background: rgba(0, 0, 0, 0.4);
+		backdrop-filter: blur(4px);
+		z-index: 2000;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 2rem;
+	}
+	.definition-card {
+		background: var(--bg-surface);
+		border: 1px solid var(--border-main);
+		border-radius: 20px;
+		width: 100%;
+		max-width: 440px;
+		max-height: 80vh;
+		display: flex;
+		flex-direction: column;
+		box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+		animation: scaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+		overflow: hidden;
+	}
+	.definition-card header {
+		padding: 1.5rem;
+		border-bottom: 1px solid var(--border-main);
+		display: flex;
+		justify-content: space-between;
+		align-items: flex-start;
+	}
+	.word-meta h2 {
+		margin: 0;
+		font-size: 1.5rem;
+		font-weight: 800;
+		color: var(--text-main);
+		text-transform: capitalize;
+	}
+	.phonetic {
+		font-size: 0.875rem;
+		color: var(--primary);
+		font-family: var(--font-mono);
+		margin-top: 0.25rem;
+		display: block;
+	}
+	.def-body {
+		padding: 1.5rem;
+		overflow-y: auto;
+		display: flex;
+		flex-direction: column;
+		gap: 1.5rem;
+	}
+	.meaning {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+	.part-of-speech {
+		font-size: 0.65rem;
+		font-weight: 800;
+		text-transform: uppercase;
+		letter-spacing: 0.1em;
+		color: var(--text-dim);
+		background: var(--bg-main);
+		padding: 0.2rem 0.6rem;
+		border-radius: 4px;
+		width: fit-content;
+	}
+	.definitions {
+		margin: 0;
+		padding-left: 1.25rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+	.definitions li {
+		font-size: 0.9375rem;
+		line-height: 1.5;
+		color: var(--text-main);
+	}
+	.def-loader {
+		padding: 4rem 2rem;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 1rem;
+		color: var(--text-dim);
+	}
+	@keyframes flyUp {
+		from {
+			opacity: 0;
+			transform: translate(-50%, -100%);
+		}
+		to {
+			opacity: 1;
+			transform: translate(-50%, -120%);
+		}
+	}
+	@keyframes scaleUp {
+		from {
+			opacity: 0;
+			transform: scale(0.95);
+		}
+		to {
+			opacity: 1;
+			transform: scale(1);
+		}
 	}
 	@media (max-width: 600px) {
 		.reader-main {

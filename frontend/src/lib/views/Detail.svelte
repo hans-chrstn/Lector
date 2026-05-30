@@ -9,6 +9,7 @@
 		type PluginManifest
 	} from '$lib/services/api';
 	import { SvelteMap } from 'svelte/reactivity';
+	import { toast } from '$lib/services/toast.svelte';
 
 	import DetailHero from './detail/DetailHero.svelte';
 	import DetailChapters from './detail/DetailChapters.svelte';
@@ -102,7 +103,7 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(document)
 			});
-			if (!res.ok) alert(await res.text());
+			if (!res.ok) toast.error(await res.text());
 			else {
 				const data = await res.json();
 				if (data.download_url) {
@@ -113,12 +114,12 @@
 					link.click();
 					window.document.body.removeChild(link);
 				}
-				if (data.message) alert(data.message);
+				if (data.message) toast.success(data.message);
 				await fetchDynamicActions();
 			}
 		} catch (e) {
 			console.error('Failed to execute plugin action:', e);
-			alert('Failed to execute plugin action');
+			toast.error('Failed to execute plugin action');
 		}
 	}
 
@@ -143,9 +144,14 @@
 	}
 
 	async function handleSaveEdit(form: any) {
-		await api.updateMetadata(document.id, form);
-		document = { ...document, ...form };
-		showEdit = false;
+		try {
+			await api.updateMetadata(document.id, form);
+			document = { ...document, ...form };
+			showEdit = false;
+			toast.success('Metadata updated successfully');
+		} catch {
+			toast.error('Failed to update metadata');
+		}
 	}
 
 	async function handleSelectMigrate(result: SearchItem, source: string) {

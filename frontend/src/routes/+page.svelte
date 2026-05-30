@@ -227,6 +227,11 @@
 		}
 	}
 
+	function handleCloseReader() {
+		activeChapter = null;
+		view = 'detail';
+	}
+
 	async function handleUpload(file: File) {
 		loading = true;
 		try {
@@ -357,21 +362,14 @@
 					pluginManifests={plugins}
 				/>
 			{:else if view === 'settings'}
-				<Settings {sources} onRefreshSources={refreshPlugins} />
+				<Settings {sources} />
 			{:else if view === 'reader' && activeChapter && activeDocument}
 				<Reader
 					chapter={activeChapter}
 					document={activeDocument}
 					onReadChapter={handleReadChapter}
-					onClose={async () => {
-						view = 'detail';
-						if (activeDocument) {
-							await Promise.all([
-								refreshDocuments(),
-								handleSelectDocument(activeDocument.url, activeDocument.source)
-							]);
-						}
-					}}
+					onClose={handleCloseReader}
+					pluginManifests={plugins}
 				/>
 			{:else}
 				<div class="empty-view">

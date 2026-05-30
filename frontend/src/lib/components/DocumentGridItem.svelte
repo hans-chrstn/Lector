@@ -36,10 +36,12 @@
 	{/snippet}
 
 	{#snippet content()}
-		<div class="title">{title}</div>
-		{#if meta}
-			<div class="meta">{meta}</div>
-		{/if}
+		<div class="title-meta-stack">
+			<div class="title">{title}</div>
+			{#if meta}
+				<div class="source-badge">{meta}</div>
+			{/if}
+		</div>
 	{/snippet}
 </BaseGridItem>
 
@@ -57,23 +59,36 @@
 		border: 1px solid rgba(255, 255, 255, 0.1);
 	}
 
+	.title-meta-stack {
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+	}
+
 	.title {
 		color: var(--text-main);
 		font-size: 0.875rem;
-		font-weight: 600;
+		font-weight: 700;
 		line-height: 1.25;
 		display: -webkit-box;
 		line-clamp: 2;
 		-webkit-line-clamp: 2;
 		-webkit-box-orient: vertical;
 		overflow: hidden;
-		margin-bottom: 0.25rem;
 	}
 
-	.meta {
-		color: var(--text-dim);
-		font-size: 0.75rem;
-		font-weight: 500;
-		text-transform: capitalize;
+	.source-badge {
+		display: inline-flex;
+		align-items: center;
+		padding: 0.15rem 0.5rem;
+		background: rgba(var(--primary-rgb), 0.1);
+		color: var(--primary);
+		border: 1px solid rgba(var(--primary-rgb), 0.2);
+		border-radius: 6px;
+		font-size: 0.65rem;
+		font-weight: 800;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		width: fit-content;
 	}
 </style>

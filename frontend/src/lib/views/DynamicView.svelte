@@ -3,10 +3,6 @@
 	import {
 		Loader2,
 		AlertCircle,
-		GripVertical,
-		Trash2,
-		Download,
-		DownloadCloud,
 		Zap,
 		Settings,
 		Info,
@@ -15,10 +11,16 @@
 		Database,
 		Layout,
 		Globe,
-		ShieldCheck
+		ShieldCheck,
+		X,
+		Trash2,
+		Download,
+		DownloadCloud,
+		GripVertical
 	} from 'lucide-svelte';
 	import { dndzone } from 'svelte-dnd-action';
 	import BasePage from '../components/base/BasePage.svelte';
+	import { toast } from '$lib/services/toast.svelte';
 	import { clsx } from 'clsx';
 
 	interface Props {
@@ -44,8 +46,16 @@
 		Database,
 		Layout,
 		Globe,
-		ShieldCheck
+		ShieldCheck,
+		X
 	};
+
+	$effect(() => {
+		if (pluginName && tabId) {
+			schema = null;
+			fetchSchema(true);
+		}
+	});
 
 	const getBase = () => {
 		if (typeof window !== 'undefined') return window.location.origin;
@@ -89,357 +99,373 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(args)
 			});
-			if (!res.ok) alert(await res.text());
-			else {
+
+			const contentType = res.headers.get('content-type');
+			if (!res.ok) {
+				const text = await res.text();
+				toast.error(text || `Action failed (${res.status})`);
+				return;
+			}
+
+			if (contentType && contentType.includes('application/json')) {
 				const data = await res.json();
-				if (data.message) alert(data.message);
+				if (data.download_url) {
+					const link = window.document.createElement('a');
+					link.href = data.download_url;
+					link.download = '';
+					window.document.body.appendChild(link);
+					link.click();
+					window.document.body.removeChild(link);
+				}
+				if (data.message) toast.success(data.message);
+				fetchSchema(false);
+			} else {
+				toast.success('Action executed');
 				fetchSchema(false);
 			}
-		} catch (e) {
-			console.error('Failed to execute plugin action:', e);
+		} catch (e: any) {
+			console.error('Plugin action error:', e);
+			toast.error(e.name === 'TypeError' ? 'Connection lost or blocked' : 'Action failed');
 		}
 	}
 
 	onMount(() => {
-		fetchSchema(true);
-		interval = setInterval(() => fetchSchema(false), 2000);
+		interval = setInterval(() => fetchSchema(false), 5000);
 	});
 
 	onDestroy(() => {
 		if (interval) clearInterval(interval);
 	});
-
-	$effect(() => {
-		if (pluginName && tabId) {
-			fetchSchema(true);
-		}
-	});
 </script>
 
-{#if loading && !schema}
-	<div class="center-state">
-		<Loader2 size={32} class="spin text-primary" />
-		<p>Loading plugin interface...</p>
-	</div>
-{:else if error && !schema}
-	<div class="center-state text-error">
-		<AlertCircle size={32} />
-		<p>{error}</p>
-		<button class="retry-btn" onclick={() => fetchSchema(true)}>Retry</button>
-	</div>
-{:else if schema}
-	<BasePage
-		title={schema.title || pluginName}
-		subtitle={schema.subtitle || `Managed by ${pluginName}`}
-		containerClass="capitalize"
-	>
-		<div class={`layout-${schema.layout || 'vertical'}`}>
-			{#each schema.components || [] as comp, i (i)}
-				{#if comp.type === 'Header'}
-					<div class="dynamic-section-header">
-						<h2>{comp.props.title}</h2>
-						{#if comp.props.subtitle}
-							<p>{comp.props.subtitle}</p>
-						{/if}
-					</div>
-				{:else if comp.type === 'ProgressList'}
-					<div class="progress-list">
-						{#each comp.props.items || [] as item, j (j)}
-							<div class="progress-item">
-								<div class="info">
-									<span class="title">{item.title}</span>
-									<div class="status-group">
-										{#if item.download_url}
-											<a href={item.download_url} class="download-link" download rel="external"
-												>Download</a
-											>
-										{/if}
-										<span class="status">{item.status}</span>
-									</div>
-								</div>
-								<div class="track">
-									<div class="fill" style="width: {item.progress}%"></div>
-								</div>
+<BasePage
+	title={schema?.title || pluginName.charAt(0).toUpperCase() + pluginName.slice(1)}
+	subtitle={schema?.subtitle || ''}
+>
+	<div class="dynamic-container">
+		{#if loading && !schema}
+			<div class="loader-box">
+				<Loader2 size={32} class="spin" />
+				<p>Loading plugin interface...</p>
+			</div>
+		{:else if error}
+			<div class="error-box">
+				<AlertCircle size={32} />
+				<h3>Interface Error</h3>
+				<p>{error}</p>
+				<button class="retry-btn" onclick={() => fetchSchema(true)}>Retry Connection</button>
+			</div>
+		{:else if schema}
+			{@const components = Array.isArray(schema) ? schema : schema.components || []}
+			{#if Array.isArray(components) && components.length > 0}
+				{#each components as component (component.id)}
+					<div class="component-wrapper">
+						{#if component.type === 'Text'}
+							<div class="text-block">
+								{#if component.props?.title}<h4>{component.props.title}</h4>{/if}
+								<p>{component.props?.text}</p>
 							</div>
-						{:else}
-							<p class="empty-text">No active items.</p>
-						{/each}
-					</div>
-				{:else if comp.type === 'SortableList'}
-					<div
-						class="sortable-list"
-						use:dndzone={{ items: comp.props.items, flipDurationMs: 200, type: comp.id }}
-						onconsider={(e) => {
-							const idx = schema.components.findIndex((c: any) => c.id === comp.id);
-							schema.components[idx].props.items = e.detail.items;
-						}}
-						onfinalize={(e) => {
-							const idx = schema.components.findIndex((c: any) => c.id === comp.id);
-							schema.components[idx].props.items = e.detail.items;
-							handleReorder(comp.id, e.detail.items);
-						}}
-					>
-						{#each comp.props.items || [] as item (item.id)}
-							<div class="sortable-item">
-								<div class="item-main">
-									<div class="grab-handle">
-										<GripVertical size={16} />
+						{:else if component.type === 'Header'}
+							<div class="header-block">
+								<h4>{component.props?.title}</h4>
+								<p>{component.props?.subtitle}</p>
+							</div>
+						{:else if component.type === 'SortableList'}
+							<div class="list-section">
+								<header>
+									<div class="title-info">
+										<h4>{component.props?.title}</h4>
+										<p>{component.props?.subtitle}</p>
 									</div>
-									<div class="item-content">
-										<div class="content-left">
-											<span class="title">{item.title}</span>
-											{#if item.subtitle}
-												<span class="subtitle">{item.subtitle}</span>
-											{/if}
-										</div>
-										<div class="content-right">
-											<div class="status-group">
-												{#if item.download_url}
-													<a href={item.download_url} class="download-link" download rel="external"
-														>Download</a
-													>
+								</header>
+								{#if component.props?.items && Array.isArray(component.props.items)}
+									<div
+										class="dynamic-list"
+										use:dndzone={{ items: component.props.items, flipDurationMs: 200 }}
+										onconsider={(e) => (component.props.items = e.detail.items)}
+										onfinalize={(e) => handleReorder(component.id, e.detail.items)}
+									>
+										{#each component.props.items as item (item.id)}
+											<div class="list-item-card">
+												<div class="drag-handle"><GripVertical size={16} /></div>
+												{#if item.cover_url}
+													<img src={item.cover_url} alt="" class="item-cover" />
 												{/if}
-												{#if item.status}
-													<span class={clsx('status-badge', item.status_variant || 'neutral')}>
-														{item.status}
-													</span>
-												{/if}
-											</div>
-											{#if item.actions}
+												<div class="item-meta">
+													<div class="title-row">
+														<span class="item-title">{item.title}</span>
+														{#if item.status}
+															<span
+																class={clsx('status-badge', item.status_variant || item.status)}
+															>
+																{item.status}
+															</span>
+														{/if}
+													</div>
+													<span class="item-sub">{item.subtitle}</span>
+													{#if item.progress !== undefined}
+														<div class="item-progress">
+															<div class="bar" style="width: {item.progress}%"></div>
+														</div>
+													{/if}
+												</div>
 												<div class="item-actions">
-													{#each item.actions as action (action.method)}
+													{#each item.actions || [] as action (action.label)}
+														{@const Icon = iconMap[action.icon] || Zap}
 														<button
-															class="action-btn"
-															onclick={() =>
-																handlePluginAction(pluginName, action.method, { id: item.id })}
+															class="action-icon-btn"
+															onclick={() => handlePluginAction(pluginName, action.method, item)}
 															title={action.label}
 														>
-															{#if action.icon && iconMap[action.icon]}
-																{@const Icon = iconMap[action.icon]}
-																<Icon size={14} />
-															{:else}
-																<Zap size={14} />
-															{/if}
+															<Icon size={16} />
 														</button>
 													{/each}
 												</div>
-											{/if}
-										</div>
-									</div>
-								</div>
-								{#if item.progress !== undefined}
-									<div class="item-progress">
-										<div class="track">
-											<div class="fill" style="width: {item.progress}%"></div>
-										</div>
+											</div>
+										{/each}
 									</div>
 								{/if}
 							</div>
-						{/each}
+						{/if}
 					</div>
-				{:else}
-					<div class="unknown-component">Unsupported component type: {comp.type}</div>
-				{/if}
-			{/each}
-		</div>
-	</BasePage>
-{/if}
+				{/each}
+			{:else}
+				<div class="empty-state">
+					<Zap size={48} />
+					<p>This plugin has no active interface elements</p>
+				</div>
+			{/if}
+		{/if}
+	</div>
+</BasePage>
 
 <style>
-	.center-state {
+	.dynamic-container {
+		display: flex;
+		flex-direction: column;
+		gap: 2rem;
+		max-width: 900px;
+		margin: 0 auto;
+	}
+
+	.loader-box,
+	.error-box,
+	.empty-state {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		height: 50vh;
-		gap: 1rem;
+		padding: 6rem 2rem;
 		color: var(--text-dim);
+		text-align: center;
 	}
-	.text-primary {
-		color: var(--primary);
-	}
-	.text-error {
+
+	.error-box {
 		color: #ef4444;
+		background: rgba(239, 68, 68, 0.05);
+		border: 1px solid rgba(239, 68, 68, 0.1);
+		border-radius: 20px;
 	}
+
+	.error-box h3 {
+		margin: 1rem 0 0.5rem;
+		color: var(--text-main);
+	}
+
 	.retry-btn {
-		background: none;
-		border: 1px solid currentColor;
-		color: inherit;
-		padding: 0.5rem 1rem;
-		border-radius: 6px;
+		margin-top: 1.5rem;
+		background: var(--text-main);
+		color: var(--bg-main);
+		border: none;
+		padding: 0.6rem 1.5rem;
+		border-radius: 10px;
+		font-weight: 700;
 		cursor: pointer;
 	}
-	.spin {
-		animation: spin 1s linear infinite;
+
+	.header-block {
+		margin-bottom: 2rem;
+		padding-bottom: 1.5rem;
+		border-bottom: 1px solid var(--border-main);
 	}
 
-	.layout-vertical {
-		display: flex;
-		flex-direction: column;
-		gap: 2rem;
-	}
-
-	.dynamic-section-header h2 {
-		font-size: 1.25rem;
-		font-weight: 700;
-		margin: 0 0 0.5rem 0;
-	}
-	.dynamic-section-header p {
-		color: var(--text-dim);
+	.header-block h4 {
 		margin: 0;
-		font-size: 0.875rem;
+		font-size: 1.5rem;
+		font-weight: 800;
+		color: var(--text-main);
 	}
 
-	.progress-list,
-	.sortable-list {
+	.header-block p {
+		margin: 0.5rem 0 0;
+		color: var(--text-dim);
+	}
+
+	.text-block h4 {
+		margin: 0 0 0.5rem;
+		font-size: 1.1rem;
+	}
+
+	.text-block p {
+		color: var(--text-dim);
+		line-height: 1.6;
+	}
+
+	.list-section header {
+		margin-bottom: 1.25rem;
+	}
+
+	.title-info h4 {
+		margin: 0;
+		font-size: 1.2rem;
+		font-weight: 800;
+	}
+
+	.title-info p {
+		margin: 0.25rem 0 0;
+		font-size: 0.85rem;
+		color: var(--text-dim);
+	}
+
+	.dynamic-list {
 		display: flex;
 		flex-direction: column;
-		gap: 1rem;
+		gap: 0.75rem;
 	}
-	.progress-item,
-	.sortable-item {
+
+	.list-item-card {
 		background: var(--bg-surface);
 		border: 1px solid var(--border-main);
 		border-radius: 12px;
-		padding: 1.25rem;
-	}
-	.sortable-item {
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
-	}
-	.item-main {
+		padding: 0.75rem;
 		display: flex;
 		align-items: center;
 		gap: 1rem;
+		transition: all 0.2s;
 	}
-	.grab-handle {
-		color: var(--text-dim);
+
+	.list-item-card:hover {
+		border-color: var(--primary);
+		background: var(--bg-surface-hover);
+	}
+
+	.drag-handle {
 		cursor: grab;
+		color: var(--text-dim);
+		padding: 0.5rem;
 	}
-	.item-content {
+
+	.item-cover {
+		width: 44px;
+		height: 60px;
+		object-fit: cover;
+		border-radius: 6px;
+		background: var(--bg-main);
+	}
+
+	.item-meta {
 		flex: 1;
 		display: flex;
-		justify-content: space-between;
-		align-items: center;
-	}
-	.content-left {
-		display: flex;
 		flex-direction: column;
-		gap: 0.25rem;
+		gap: 0.2rem;
 	}
-	.subtitle {
-		font-size: 0.75rem;
-		color: var(--text-dim);
-		font-weight: 400;
+
+	.item-title {
+		font-weight: 700;
+		font-size: 0.95rem;
+		color: var(--text-main);
 	}
-	.content-right {
+
+	.title-row {
 		display: flex;
 		align-items: center;
-		gap: 1.5rem;
+		gap: 0.75rem;
 	}
+
 	.status-badge {
-		padding: 0.25rem 0.6rem;
-		border-radius: 6px;
-		font-size: 0.7rem;
-		font-weight: 700;
+		font-size: 0.65rem;
+		font-weight: 800;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
-	}
-	.status-badge.neutral {
-		background: var(--bg-surface-hover);
+		padding: 0.15rem 0.5rem;
+		border-radius: 4px;
+		background: var(--bg-main);
 		color: var(--text-dim);
 	}
-	.status-badge.success {
-		background: #10b98120;
+
+	.status-badge.active {
+		background: rgba(59, 130, 246, 0.2);
+		color: #3b82f6;
+	}
+
+	.status-badge.pending {
+		background: rgba(255, 255, 255, 0.05);
+		color: #a1a1aa;
+	}
+
+	.status-badge.completed {
+		background: rgba(16, 185, 129, 0.2);
 		color: #10b981;
 	}
-	.status-badge.warning {
-		background: #f59e0b20;
-		color: #f59e0b;
-	}
+
 	.status-badge.error {
-		background: #ef444420;
+		background: rgba(239, 68, 68, 0.2);
 		color: #ef4444;
+	}
+
+	.item-sub {
+		font-size: 0.8rem;
+		color: var(--text-dim);
+	}
+
+	.item-progress {
+		height: 4px;
+		background: var(--bg-main);
+		border-radius: 2px;
+		margin-top: 0.4rem;
+		overflow: hidden;
+	}
+
+	.item-progress .bar {
+		height: 100%;
+		background: var(--primary);
 	}
 
 	.item-actions {
 		display: flex;
 		gap: 0.5rem;
 	}
-	.action-btn {
-		background: var(--bg-surface-hover);
+
+	.action-icon-btn {
+		background: var(--bg-main);
 		border: 1px solid var(--border-main);
-		color: var(--text-main);
-		padding: 0.4rem;
+		color: var(--text-dim);
+		width: 34px;
+		height: 34px;
 		border-radius: 8px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
 		cursor: pointer;
 		transition: all 0.2s;
 	}
-	.action-btn:hover {
-		border-color: var(--primary);
+
+	.action-icon-btn:hover {
 		color: var(--primary);
+		border-color: var(--primary);
+		background: rgba(var(--primary-rgb), 0.1);
 	}
 
-	.item-progress {
-		width: 100%;
-	}
-	.progress-item .info {
-		display: flex;
-		justify-content: space-between;
-		margin-bottom: 1rem;
-		font-size: 0.9rem;
-		font-weight: 600;
-	}
-	.progress-item .status {
-		color: var(--text-dim);
-		text-transform: capitalize;
-		font-size: 0.8rem;
-	}
-	.status-group {
-		display: flex;
-		align-items: center;
-		gap: 1rem;
-	}
-	.download-link {
-		background: var(--text-main);
-		color: var(--bg-main);
-		padding: 0.3rem 0.8rem;
-		border-radius: 8px;
-		text-decoration: none;
-		font-weight: 700;
-		font-size: 0.75rem;
-		transition: all 0.2s;
-	}
-	.download-link:hover {
-		opacity: 0.9;
-		transform: translateY(-1px);
-	}
-	.track {
-		height: 6px;
-		background: var(--bg-main);
-		border-radius: 10px;
-		overflow: hidden;
-	}
-	.fill {
-		height: 100%;
-		background: var(--primary);
-		transition: width 0.3s;
-	}
-	.empty-text {
-		color: var(--text-dim);
-		text-align: center;
-		padding: 2rem;
-		font-style: italic;
+	:global(.spin) {
+		animation: spin 2s linear infinite;
 	}
 
 	@keyframes spin {
+		from {
+			transform: rotate(0deg);
+		}
 		to {
 			transform: rotate(360deg);
 		}
-	}
-
-	.capitalize {
-		text-transform: capitalize;
 	}
 </style>
