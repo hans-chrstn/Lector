@@ -3,6 +3,8 @@ package db
 import (
 	"log"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/user/lector/internal/models"
@@ -18,6 +20,11 @@ func InitDB(path string) {
 
 	if envPath := os.Getenv("DATABASE_PATH"); envPath != "" {
 		path = envPath
+	}
+
+	dir := filepath.Dir(path)
+	if dir != "." && dir != "" {
+		os.MkdirAll(dir, 0777)
 	}
 
 	newLogger := logger.New(
@@ -42,7 +49,7 @@ func InitDB(path string) {
 	sqlDB.Exec("PRAGMA busy_timeout=5000;")
 	sqlDB.Exec("PRAGMA synchronous=NORMAL;")
 
-	if path != ":memory:" {
+	if !strings.Contains(path, ":memory:") {
 		os.Chmod(path, 0600)
 	}
 

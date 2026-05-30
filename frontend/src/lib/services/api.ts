@@ -31,9 +31,10 @@ export const api = {
 			r.json()
 		);
 	},
-	async uploadPlugin(file: File): Promise<{ name: string }> {
+	async uploadPlugin(file: File, name?: string): Promise<{ name: string }> {
 		const formData = new FormData();
 		formData.append('plugin', file);
+		if (name) formData.append('name', name);
 		return fetch(`${getBase()}/api/plugins/upload`, {
 			method: 'POST',
 			body: formData

@@ -8,6 +8,7 @@ build/
 dist/
 public/
 plugins/**/*.lua
+!plugins/examples/**
 /lector
 *.exe
 frontend/.svelte-kit/
@@ -16,6 +17,8 @@ frontend/build/
 # Databases and Data
 *.db
 *.db-journal
+*-shm
+*-wal
 lector.db*
 data/
 uploads/

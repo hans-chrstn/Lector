@@ -39,3 +39,48 @@ func TestLuaPlugin(t *testing.T) {
 		}
 	})
 }
+
+func TestModularPluginSupport(t *testing.T) {
+	t.Run("Lua Defined ID", func(t *testing.T) {
+		luaCode := `
+			app.enable_capability("ui")
+			app.set_id("my_custom_id")
+			app.add_action("selection", "Action", "func")
+		`
+		os.WriteFile("id_test.lua", []byte(luaCode), 0644)
+		defer os.Remove("id_test.lua")
+
+		p, err := plugin.NewLuaPlugin("initial_name", "id_test.lua")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if p.Name != "my_custom_id" {
+			t.Errorf("Expected ID override to 'my_custom_id', got %s", p.Name)
+		}
+	})
+
+	t.Run("Selection Actions", func(t *testing.T) {
+		luaCode := `
+			app.enable_capability("ui")
+			app.add_action("selection", "Define", "define")
+		`
+		os.WriteFile("action_test.lua", []byte(luaCode), 0644)
+		defer os.Remove("action_test.lua")
+
+		p, err := plugin.NewLuaPlugin("test", "action_test.lua")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		found := false
+		for _, a := range p.Actions {
+			if a.Context == "selection" && a.Label == "Define" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("Selection action not registered")
+		}
+	})
+}

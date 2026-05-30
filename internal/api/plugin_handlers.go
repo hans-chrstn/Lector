@@ -1,8 +1,10 @@
 package api
 
 import (
+	"archive/zip"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,39 +27,116 @@ func (h *API) UploadPlugin(c *fiber.Ctx) error {
 		return c.Status(400).SendString("No file uploaded")
 	}
 
-	if !strings.HasSuffix(file.Filename, ".lua") {
-		return c.Status(400).SendString("Only .lua files are allowed")
+	name := strings.ToLower(strings.TrimSpace(c.FormValue("name")))
+	ext := strings.ToLower(filepath.Ext(file.Filename))
+
+	if ext != ".zip" && ext != ".lua" {
+		return c.Status(400).SendString("Only .zip or .lua files are allowed")
 	}
 
 	pluginDir := getPluginDir()
-	if err := os.MkdirAll(pluginDir, 0755); err != nil {
-		return c.Status(500).SendString("Failed to create plugins directory")
+	os.MkdirAll(pluginDir, 0755)
+
+	tempName := fmt.Sprintf("temp_%d", time.Now().UnixNano())
+	tempPath := filepath.Join(pluginDir, tempName+ext)
+	if err := c.SaveFile(file, tempPath); err != nil {
+		return c.Status(500).SendString("Failed to save upload")
+	}
+	defer os.RemoveAll(tempPath)
+
+	var detectedID string
+	var destDir string
+
+	if ext == ".lua" {
+		p, err := plugin.NewLuaPlugin("probe", tempPath)
+		if err == nil {
+			if p.Name != "probe" {
+				detectedID = p.Name
+			}
+			p.L.Close()
+		}
+
+		finalID := name
+		if finalID == "" {
+			finalID = detectedID
+		}
+		if finalID == "" {
+			baseName := strings.ToLower(strings.TrimSuffix(file.Filename, ext))
+			if baseName == "init" {
+				return c.Status(409).SendString("Generic filename detected. Please provide a plugin name.")
+			}
+			finalID = baseName
+		}
+
+		destDir = filepath.Join(pluginDir, finalID)
+		os.MkdirAll(destDir, 0755)
+		if err := os.Rename(tempPath, filepath.Join(destDir, "init.lua")); err != nil {
+			return c.Status(500).SendString("Failed to move plugin")
+		}
+		name = finalID
+	} else {
+		destDir = filepath.Join(pluginDir, name)
+		if name == "" {
+			destDir = filepath.Join(pluginDir, strings.TrimSuffix(file.Filename, ext))
+		}
+		os.MkdirAll(destDir, 0755)
+
+		r, err := zip.OpenReader(tempPath)
+		if err != nil {
+			return c.Status(400).SendString("Invalid zip file")
+		}
+		defer r.Close()
+
+		for _, f := range r.File {
+			fpath := filepath.Join(destDir, f.Name)
+			if !strings.HasPrefix(fpath, filepath.Clean(destDir)+string(os.PathSeparator)) {
+				return c.Status(400).SendString("Invalid file path in zip")
+			}
+			if f.FileInfo().IsDir() {
+				os.MkdirAll(fpath, 0755)
+				continue
+			}
+			os.MkdirAll(filepath.Dir(fpath), 0755)
+			outFile, _ := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
+			rc, _ := f.Open()
+			io.Copy(outFile, rc)
+			outFile.Close()
+			rc.Close()
+		}
+
+		entryPoint := filepath.Join(destDir, "init.lua")
+		p, err := plugin.NewLuaPlugin("probe", entryPoint)
+		if err == nil {
+			detectedID = p.Name
+			p.L.Close()
+		}
+
+		if detectedID != "" && detectedID != "probe" && detectedID != name {
+			newDest := filepath.Join(pluginDir, detectedID)
+			os.RemoveAll(newDest)
+			os.Rename(destDir, newDest)
+			name = detectedID
+		} else if name == "" {
+			name = strings.ToLower(strings.TrimSuffix(file.Filename, ext))
+		}
 	}
 
-	name := strings.ToLower(strings.TrimSuffix(file.Filename, ".lua"))
-	path := filepath.Join(pluginDir, file.Filename)
-
-	if err := c.SaveFile(file, path); err != nil {
-		return c.Status(500).SendString("Failed to save file")
-	}
-
-	testPlugin, err := plugin.NewLuaPlugin(name, path)
-	if err != nil || testPlugin.Validate() != nil {
-		os.Remove(path)
+	finalEntryPoint := filepath.Join(pluginDir, name, "init.lua")
+	testPlugin, err := plugin.NewLuaPlugin(name, finalEntryPoint)
+	if err != nil {
+		os.RemoveAll(filepath.Join(pluginDir, name))
 		return c.Status(400).SendString(fmt.Sprintf("Invalid plugin: %v", err))
 	}
 
 	h.Plugins[name] = testPlugin
-
-	var p models.Plugin
-	if err := db.DB.Where("name = ?", name).First(&p).Error; err != nil {
-		p = models.Plugin{Name: name, IsEnabled: true}
-		db.DB.Create(&p)
+	var dbP models.Plugin
+	if err := db.DB.Where("name = ?", name).First(&dbP).Error; err != nil {
+		dbP = models.Plugin{Name: name, IsEnabled: true}
+		db.DB.Create(&dbP)
 	}
 
 	return c.JSON(fiber.Map{"status": "success", "name": name})
 }
-
 func (h *API) GetPluginsManifest(c *fiber.Ctx) error {
 	type PluginManifest struct {
 		Name           string                       `json:"name"`

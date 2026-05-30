@@ -19,6 +19,7 @@ func (s *LuaPlugin) registerAppFunctions() {
 	s.L.SetField(app, "add_settings_group", s.L.NewFunction(s.addSettingsGroup))
 	s.L.SetField(app, "add_permission", s.L.NewFunction(s.addPermission))
 	s.L.SetField(app, "add_action", s.L.NewFunction(s.addAction))
+	s.L.SetField(app, "set_id", s.L.NewFunction(s.setID))
 	s.L.SetField(app, "rpc", s.L.NewFunction(s.appRPC))
 	s.L.SetField(app, "log", s.L.NewFunction(s.appLog))
 	s.L.SetField(app, "spawn", s.L.NewFunction(s.appSpawn))
@@ -90,6 +91,11 @@ func (s *LuaPlugin) addAction(L *lua.LState) int {
 	s.ManifestMu.Lock()
 	s.Actions = append(s.Actions, Action{Context: context, Label: label, Method: method, Icon: icon})
 	s.ManifestMu.Unlock()
+	return 0
+}
+
+func (s *LuaPlugin) setID(L *lua.LState) int {
+	s.Name = strings.ToLower(L.CheckString(1))
 	return 0
 }
 
