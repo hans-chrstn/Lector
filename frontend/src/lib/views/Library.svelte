@@ -1,15 +1,13 @@
 <script lang="ts">
-	import {
-		FolderPlus,
-		CheckCircle2,
-		Filter,
-		Grid3X3,
-		List,
-		Upload,
-		Ghost,
-		Search,
-		X
-	} from 'lucide-svelte';
+	import FolderPlus from 'lucide-svelte/icons/folder-plus';
+	import CheckCircle2 from 'lucide-svelte/icons/check-circle-2';
+	import Filter from 'lucide-svelte/icons/filter';
+	import Grid3X3 from 'lucide-svelte/icons/grid-3x3';
+	import List from 'lucide-svelte/icons/list';
+	import Upload from 'lucide-svelte/icons/upload';
+	import Ghost from 'lucide-svelte/icons/ghost';
+	import Search from 'lucide-svelte/icons/search';
+	import X from 'lucide-svelte/icons/x';
 	import DocumentGridItem from '../components/DocumentGridItem.svelte';
 	import DocumentListItem from '../components/DocumentListItem.svelte';
 	import BatchToolbar from '../components/BatchToolbar.svelte';
@@ -29,6 +27,7 @@
 		onBatchMove: (ids: number[], groupId: number) => void;
 		onBatchArchive: (ids: number[], archive: boolean) => void;
 		onBatchMarkRead: (ids: number[], isRead: boolean) => void;
+		onBatchRefresh: (ids: number[]) => void;
 	}
 	let {
 		documents = [],
@@ -40,7 +39,8 @@
 		onBatchDelete,
 		onBatchMove,
 		onBatchArchive,
-		onBatchMarkRead
+		onBatchMarkRead,
+		onBatchRefresh
 	}: Props = $props();
 
 	let selectedGroupId = $state(0);
@@ -90,6 +90,8 @@
 			await onBatchMarkRead(ids, true);
 		} else if (action === 'mark-unread') {
 			await onBatchMarkRead(ids, false);
+		} else if (action === 'refresh') {
+			await onBatchRefresh(ids);
 		}
 
 		selectedIds.clear();

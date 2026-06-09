@@ -171,5 +171,7 @@
 		border-radius: 4px;
 		padding: 4px;
 		font-size: 0.875rem;
+		width: 100%;
+		min-width: 0;
 	}
 </style>

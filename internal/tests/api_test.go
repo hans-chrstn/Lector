@@ -10,15 +10,17 @@ import (
 	"github.com/user/lector/internal/db"
 	"github.com/user/lector/internal/models"
 	"github.com/user/lector/internal/plugin"
+	"github.com/user/lector/internal/repository"
 )
 
 func TestAPIRoutes(t *testing.T) {
 	app := fiber.New()
-	plugins := make(map[string]*plugin.LuaPlugin)
-
 	db.InitDB(":memory:")
-
-	api.RegisterRoutes(app, plugins)
+	engine := &plugin.PluginEngine{
+		Store:   repository.NewPluginRepository(),
+		Plugins: make(map[string]*plugin.LuaPlugin),
+	}
+	api.RegisterRoutes(app, engine)
 
 	t.Run("Get Plugins", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/api/plugins", nil)
@@ -28,7 +30,7 @@ func TestAPIRoutes(t *testing.T) {
 		}
 	})
 
-	t.Run("Get Documents (Empty)", func(t *testing.T) {
+	t.Run("Get Documents", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/api/documents", nil)
 		resp, _ := app.Test(req)
 		if resp.StatusCode != 200 {

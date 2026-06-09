@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/user/lector/internal/plugin"
+	"github.com/user/lector/internal/core/httpclient"
 )
 
 type RemoteMetadata struct {
@@ -29,7 +29,7 @@ func FetchRemoteMetadata(title, author string) *RemoteMetadata {
 		apiURL := fmt.Sprintf("https://www.googleapis.com/books/v1/volumes?q=%s&maxResults=1", url.QueryEscape(q))
 		req, _ := http.NewRequest("GET", apiURL, nil)
 
-		resp, err := plugin.HTTPClient.Do(req)
+		resp, err := httpclient.InternalClient.Do(req)
 
 		if err != nil || resp.StatusCode != 200 {
 			return nil

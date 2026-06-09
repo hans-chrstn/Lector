@@ -11,7 +11,7 @@ import (
 
 func (h *API) GetLibraryPaths(c *fiber.Ctx) error {
 	var paths []models.LibraryPath
-	db.DB.Find(&paths)
+	db.DB.WithContext(c.UserContext()).Find(&paths)
 
 	uploadsPath := "uploads"
 
@@ -45,24 +45,24 @@ func (h *API) GetLibraryPaths(c *fiber.Ctx) error {
 func (h *API) AddLibraryPath(c *fiber.Ctx) error {
 	var lp models.LibraryPath
 	if err := c.BodyParser(&lp); err != nil {
-		return c.Status(400).SendString(err.Error())
+		return c.Status(400).JSON(fiber.Map{"error": err.Error()})
 	}
 	if lp.Path == "" {
-		return c.Status(400).SendString("Path is required")
+		return c.Status(400).JSON(fiber.Map{"error": "Path is required"})
 	}
 	if lp.Pattern == "" {
 		lp.Pattern = "None/Flat"
 	}
-	if err := db.DB.Create(&lp).Error; err != nil {
-		return c.Status(500).SendString(err.Error())
+	if err := db.DB.WithContext(c.UserContext()).Create(&lp).Error; err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 	}
 	return c.JSON(lp)
 }
 
 func (h *API) DeleteLibraryPath(c *fiber.Ctx) error {
 	id, _ := strconv.Atoi(c.Params("id"))
-	if err := db.DB.Delete(&models.LibraryPath{}, uint(id)).Error; err != nil {
-		return c.Status(500).SendString(err.Error())
+	if err := db.DB.WithContext(c.UserContext()).Delete(&models.LibraryPath{}, uint(id)).Error; err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 	}
 	return c.SendString("Deleted")
 }

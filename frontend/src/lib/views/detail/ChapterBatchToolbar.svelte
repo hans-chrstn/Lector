@@ -1,5 +1,8 @@
 <script lang="ts">
-	import { CheckSquare, Square, BookOpen, BookOpenCheck } from 'lucide-svelte';
+	import CheckSquare from 'lucide-svelte/icons/check-square';
+	import Square from 'lucide-svelte/icons/square';
+	import BookOpen from 'lucide-svelte/icons/book-open';
+	import BookOpenCheck from 'lucide-svelte/icons/book-open-check';
 
 	interface Props {
 		selectedCount: number;

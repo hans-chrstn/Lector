@@ -17,21 +17,21 @@ func (h *API) HandleUpload(c *fiber.Ctx) error {
 	file, err := c.FormFile("book")
 	if err != nil {
 		log.Printf("[API] Upload error: %v", err)
-		return c.Status(400).SendString("No file uploaded")
+		return c.Status(400).JSON(fiber.Map{"error": "No file uploaded"})
 	}
 
 	src, err := file.Open()
 	if err != nil {
-		return c.Status(500).SendString("Failed to open uploaded file")
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to open uploaded file"})
 	}
 	defer src.Close()
 
 	head := make([]byte, 512)
 	if _, err := src.Read(head); err != nil {
-		return c.Status(500).SendString("Failed to read file header")
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to read file header"})
 	}
 	if _, err := src.Seek(0, 0); err != nil {
-		return c.Status(500).SendString("Failed to reset file pointer")
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to reset file pointer"})
 	}
 
 	contentType := http.DetectContentType(head)
@@ -47,7 +47,7 @@ func (h *API) HandleUpload(c *fiber.Ctx) error {
 
 	if !isPDF && !isZIP && !isRAR {
 		log.Printf("[API] Blocked invalid upload type: %s", contentType)
-		return c.Status(400).SendString("Only EPUB, PDF, CBZ, and CBR files are allowed")
+		return c.Status(400).JSON(fiber.Map{"error": "Only EPUB, PDF, CBZ, and CBR files are allowed"})
 	}
 
 	newID := uuid.New().String()
@@ -66,13 +66,13 @@ func (h *API) HandleUpload(c *fiber.Ctx) error {
 	log.Printf("[API] Saving upload as: %s (Detected: %s)", path, contentType)
 	if err := c.SaveFile(file, path); err != nil {
 		log.Printf("[API] Save error: %v", err)
-		return c.Status(500).SendString("Failed to save file")
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to save file"})
 	}
 
 	document, err := services.ProcessLocalFile(path)
 	if err != nil {
 		log.Printf("[API] Process error: %v", err)
-		return c.Status(500).SendString(err.Error())
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 	}
 
 	log.Printf("[API] Successfully processed book: %s (ID: %d)", document.Title, document.ID)

@@ -1,5 +1,10 @@
 <script lang="ts">
-	import { Trash2, CheckCircle2, CheckSquare, Square, X, Clock } from 'lucide-svelte';
+	import Trash2 from 'lucide-svelte/icons/trash-2';
+	import CheckCircle2 from 'lucide-svelte/icons/check-circle-2';
+	import CheckSquare from 'lucide-svelte/icons/check-square';
+	import Square from 'lucide-svelte/icons/square';
+	import X from 'lucide-svelte/icons/x';
+	import Clock from 'lucide-svelte/icons/clock';
 	import DocumentGridItem from '../components/DocumentGridItem.svelte';
 	import BasePage from '../components/base/BasePage.svelte';
 	import { clsx } from 'clsx';

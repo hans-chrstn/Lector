@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Continuous Scroll Reader</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background: #111;
+        color: #ddd;
+        font-family: sans-serif;
+        line-height: 1.6;
+      }
+      #reader {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      .chapter {
+        margin-bottom: 50px;
+        padding-bottom: 50px;
+        border-bottom: 2px solid #333;
+      }
+      .chapter-title {
+        font-size: 2em;
+        margin-bottom: 20px;
+        color: #fff;
+      }
+      img {
+        max-width: 100%;
+        height: auto;
+        display: block;
+        margin: 0 auto;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="reader">
+      <h2 style="text-align: center">Loading...</h2>
+    </div>
+
+    <script>
+      async function loadData() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const docId = urlParams.get("document_id");
+        const chapterId = urlParams.get("chapter_id");
+
+        if (!docId) {
+          document.getElementById("reader").innerHTML =
+            "<h2>Error: No document_id provided</h2>";
+          return;
+        }
+
+        try {
+          const docRes = await fetch(`/api/documents/${docId}`);
+          const docData = await docRes.json();
+
+          let html = "";
+          const currentChRes = await fetch(`/api/chapters/${chapterId}`);
+          const currentCh = await currentChRes.json();
+
+          html += `<div class="chapter" id="ch-${currentCh.id}">
+                    <div class="chapter-title">${currentCh.title || "Chapter " + currentCh.chapter_index}</div>
+                    <div class="chapter-content">${currentCh.content}</div>
+                </div>`;
+
+          document.getElementById("reader").innerHTML = html;
+
+          window.addEventListener("scroll", () => {
+            const progress =
+              window.scrollY /
+              (document.documentElement.scrollHeight - window.innerHeight);
+            window.parent.postMessage(
+              {
+                type: "LECTOR_SYNC_PROGRESS",
+                chapterId: chapterId,
+                scrollPos: progress,
+              },
+              "*",
+            );
+          });
+        } catch (err) {
+          console.error(err);
+          document.getElementById("reader").innerHTML =
+            "<h2>Failed to load reading data.</h2><p>" + err.message + "</p>";
+        }
+      }
+
+      loadData();
+    </script>
+  </body>
+</html>

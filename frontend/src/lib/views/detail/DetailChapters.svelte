@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { CheckCircle2, ListFilter } from 'lucide-svelte';
+	import CheckCircle2 from 'lucide-svelte/icons/check-circle-2';
+	import ListFilter from 'lucide-svelte/icons/list-filter';
 	import type { Chapter } from '$lib/services/api';
 	import { SvelteSet } from 'svelte/reactivity';
 	import ChapterListItem from './ChapterListItem.svelte';
@@ -14,6 +15,25 @@
 	}
 
 	let { chapters = [], readChapters, progress, onReadChapter, onBatchAction }: Props = $props();
+
+	const PAGE_SIZE = 50;
+	let currentPage = $state(0);
+	let initializedPage = $state(false);
+
+	const totalPages = $derived(Math.ceil(chapters.length / PAGE_SIZE));
+	const visibleChapters = $derived(
+		chapters.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE)
+	);
+
+	$effect(() => {
+		if (!initializedPage && progress?.chapter_id && chapters.length > 0) {
+			const idx = chapters.findIndex((c) => c.id === progress.chapter_id);
+			if (idx !== -1) {
+				currentPage = Math.floor(idx / PAGE_SIZE);
+				initializedPage = true;
+			}
+		}
+	});
 
 	let markMode = $state(false);
 	let selectedIds = new SvelteSet<number>();
@@ -93,7 +113,7 @@
 	</header>
 
 	<div class="chapters-list">
-		{#each chapters as ch (ch.id)}
+		{#each visibleChapters as ch (ch.id)}
 			<ChapterListItem
 				chapter={ch}
 				isCurrent={progress?.chapter_id === ch.id}
@@ -104,6 +124,22 @@
 			/>
 		{/each}
 	</div>
+
+	{#if totalPages > 1}
+		<div class="pagination">
+			<button class="pag-btn" disabled={currentPage === 0} onclick={() => currentPage--}>
+				Previous
+			</button>
+			<span class="pag-info">Page {currentPage + 1} of {totalPages}</span>
+			<button
+				class="pag-btn"
+				disabled={currentPage >= totalPages - 1}
+				onclick={() => currentPage++}
+			>
+				Next
+			</button>
+		</div>
+	{/if}
 
 	<ChapterBatchToolbar
 		selectedCount={selectedIds.size}
@@ -174,5 +210,37 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.75rem;
+	}
+	.pagination {
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		gap: 1rem;
+		margin-top: 1.5rem;
+		margin-bottom: 1.5rem;
+	}
+	.pag-btn {
+		background: var(--bg-surface);
+		border: 1px solid var(--border-main);
+		color: var(--text-main);
+		padding: 0.5rem 1rem;
+		border-radius: 8px;
+		font-size: 0.875rem;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+	.pag-btn:hover:not(:disabled) {
+		border-color: var(--border-bright);
+		background: var(--bg-hover);
+	}
+	.pag-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+	.pag-info {
+		font-size: 0.875rem;
+		color: var(--text-dim);
+		font-weight: 500;
 	}
 </style>

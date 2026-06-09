@@ -1,23 +1,21 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import {
-		Loader2,
-		AlertCircle,
-		Zap,
-		Settings,
-		Info,
-		CheckCircle2,
-		History,
-		Database,
-		Layout,
-		Globe,
-		ShieldCheck,
-		X,
-		Trash2,
-		Download,
-		DownloadCloud,
-		GripVertical
-	} from 'lucide-svelte';
+	import Loader2 from 'lucide-svelte/icons/loader-2';
+	import AlertCircle from 'lucide-svelte/icons/alert-circle';
+	import Zap from 'lucide-svelte/icons/zap';
+	import Settings from 'lucide-svelte/icons/settings';
+	import Info from 'lucide-svelte/icons/info';
+	import CheckCircle2 from 'lucide-svelte/icons/check-circle-2';
+	import History from 'lucide-svelte/icons/history';
+	import Database from 'lucide-svelte/icons/database';
+	import Layout from 'lucide-svelte/icons/layout';
+	import Globe from 'lucide-svelte/icons/globe';
+	import ShieldCheck from 'lucide-svelte/icons/shield-check';
+	import X from 'lucide-svelte/icons/x';
+	import Trash2 from 'lucide-svelte/icons/trash-2';
+	import Download from 'lucide-svelte/icons/download';
+	import DownloadCloud from 'lucide-svelte/icons/download-cloud';
+	import GripVertical from 'lucide-svelte/icons/grip-vertical';
 	import { dndzone } from 'svelte-dnd-action';
 	import BasePage from '../components/base/BasePage.svelte';
 	import { toast } from '$lib/services/toast.svelte';
@@ -33,6 +31,7 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let interval: any;
+	let formData = $state<Record<string, string>>({});
 
 	const iconMap: Record<string, any> = {
 		Trash2,
@@ -50,10 +49,46 @@
 		X
 	};
 
+	onMount(() => {
+		window.addEventListener('message', handleMessage);
+
+		// Ping IFrames that we are ready to receive their initial data
+		const iframes = document.querySelectorAll('iframe');
+		iframes.forEach((iframe) => {
+			if (iframe.contentWindow) {
+				iframe.contentWindow.postMessage({ type: 'READY' }, '*');
+			}
+		});
+
+		return () => {
+			window.removeEventListener('message', handleMessage);
+		};
+	});
+
+	function handleMessage(e: MessageEvent) {
+		if (e.data?.type === 'UPDATE_FORM_DATA' && e.data?.id) {
+			formData[e.data.id] = e.data.value;
+		}
+	}
+
 	$effect(() => {
 		if (pluginName && tabId) {
 			schema = null;
 			fetchSchema(true);
+		}
+	});
+
+	// Re-ping iframes when schema updates and renders them
+	$effect(() => {
+		if (schema && !loading) {
+			setTimeout(() => {
+				const iframes = document.querySelectorAll('iframe');
+				iframes.forEach((iframe) => {
+					if (iframe.contentWindow) {
+						iframe.contentWindow.postMessage({ type: 'READY' }, '*');
+					}
+				});
+			}, 200); // Give DOM time to render iframe tags
 		}
 	});
 
@@ -158,77 +193,116 @@
 		{:else if schema}
 			{@const components = Array.isArray(schema) ? schema : schema.components || []}
 			{#if Array.isArray(components) && components.length > 0}
-				{#each components as component (component.id)}
-					<div class="component-wrapper">
-						{#if component.type === 'Text'}
-							<div class="text-block">
-								{#if component.props?.title}<h4>{component.props.title}</h4>{/if}
-								<p>{component.props?.text}</p>
-							</div>
-						{:else if component.type === 'Header'}
-							<div class="header-block">
-								<h4>{component.props?.title}</h4>
-								<p>{component.props?.subtitle}</p>
-							</div>
-						{:else if component.type === 'SortableList'}
-							<div class="list-section">
-								<header>
-									<div class="title-info">
-										<h4>{component.props?.title}</h4>
-										<p>{component.props?.subtitle}</p>
-									</div>
-								</header>
-								{#if component.props?.items && Array.isArray(component.props.items)}
-									<div
-										class="dynamic-list"
-										use:dndzone={{ items: component.props.items, flipDurationMs: 200 }}
-										onconsider={(e) => (component.props.items = e.detail.items)}
-										onfinalize={(e) => handleReorder(component.id, e.detail.items)}
-									>
-										{#each component.props.items as item (item.id)}
-											<div class="list-item-card">
-												<div class="drag-handle"><GripVertical size={16} /></div>
-												{#if item.cover_url}
-													<img src={item.cover_url} alt="" class="item-cover" />
-												{/if}
-												<div class="item-meta">
-													<div class="title-row">
-														<span class="item-title">{item.title}</span>
-														{#if item.status}
-															<span
-																class={clsx('status-badge', item.status_variant || item.status)}
-															>
-																{item.status}
-															</span>
+				<div class={schema.layout === 'grid' ? 'components-grid' : 'components-linear'}>
+					{#each components as component (component.id)}
+						<div
+							class="component-wrapper"
+							style={schema.layout === 'grid' && component.type === 'Button'
+								? 'grid-column: 1 / -1;'
+								: ''}
+						>
+							{#if component.type === 'Text'}
+								<div class="text-block">
+									{#if component.props?.title}<h4>{component.props.title}</h4>{/if}
+									<p>{component.props?.text}</p>
+								</div>
+							{:else if component.type === 'Header'}
+								<div class="header-block">
+									<h4>{component.props?.title}</h4>
+									<p>{component.props?.subtitle}</p>
+								</div>
+							{:else if component.type === 'SortableList'}
+								<div class="list-section">
+									<header>
+										<div class="title-info">
+											<h4>{component.props?.title}</h4>
+											<p>{component.props?.subtitle}</p>
+										</div>
+									</header>
+									{#if component.props?.items && Array.isArray(component.props.items)}
+										<div
+											class="dynamic-list"
+											use:dndzone={{ items: component.props.items, flipDurationMs: 200 }}
+											onconsider={(e) => (component.props.items = e.detail.items)}
+											onfinalize={(e) => handleReorder(component.id, e.detail.items)}
+										>
+											{#each component.props.items as item (item.id)}
+												<div class="list-item-card">
+													<div class="drag-handle"><GripVertical size={16} /></div>
+													{#if item.cover_url}
+														<img src={item.cover_url} alt="" class="item-cover" />
+													{/if}
+													<div class="item-meta">
+														<div class="title-row">
+															<span class="item-title">{item.title}</span>
+															{#if item.status}
+																<span
+																	class={clsx('status-badge', item.status_variant || item.status)}
+																>
+																	{item.status}
+																</span>
+															{/if}
+														</div>
+														<span class="item-sub">{item.subtitle}</span>
+														{#if item.progress !== undefined}
+															<div class="item-progress">
+																<div class="bar" style="width: {item.progress}%"></div>
+															</div>
 														{/if}
 													</div>
-													<span class="item-sub">{item.subtitle}</span>
-													{#if item.progress !== undefined}
-														<div class="item-progress">
-															<div class="bar" style="width: {item.progress}%"></div>
-														</div>
-													{/if}
+													<div class="item-actions">
+														{#each item.actions || [] as action (action.label)}
+															{@const Icon = iconMap[action.icon] || Zap}
+															<button
+																class="action-icon-btn"
+																onclick={() => handlePluginAction(pluginName, action.method, item)}
+																title={action.label}
+															>
+																<Icon size={16} />
+															</button>
+														{/each}
+													</div>
 												</div>
-												<div class="item-actions">
-													{#each item.actions || [] as action (action.label)}
-														{@const Icon = iconMap[action.icon] || Zap}
-														<button
-															class="action-icon-btn"
-															onclick={() => handlePluginAction(pluginName, action.method, item)}
-															title={action.label}
-														>
-															<Icon size={16} />
-														</button>
-													{/each}
-												</div>
-											</div>
-										{/each}
-									</div>
-								{/if}
-							</div>
-						{/if}
-					</div>
-				{/each}
+											{/each}
+										</div>
+									{/if}
+								</div>
+							{:else if component.type === 'TextInput'}
+								<div class="input-field">
+									{#if component.props?.label}
+										<label for={component.id}>{component.props.label}</label>
+									{/if}
+									<input
+										id={component.id}
+										type={component.props?.type || 'text'}
+										placeholder={component.props?.placeholder || ''}
+										bind:value={formData[component.id]}
+										class={component.props?.type === 'color' ? 'color-input' : ''}
+									/>
+								</div>
+							{:else if component.type === 'IFrame'}
+								<div class="iframe-field">
+									{#if component.props?.label}
+										<span class="field-label">{component.props.label}</span>
+									{/if}
+									<iframe
+										src={component.props?.src}
+										style={component.props?.style ||
+											'width: 100%; height: 250px; border: none; border-radius: 8px; background: transparent;'}
+										title={component.props?.label || component.id}
+									></iframe>
+								</div>
+							{:else if component.type === 'Button'}
+								<button
+									class="primary-btn"
+									onclick={() => handlePluginAction(pluginName, component.props.method, formData)}
+								>
+									{component.props?.label || 'Submit'}
+								</button>
+							{/if}
+						</div>
+					{/each}
+				</div>
 			{:else}
 				<div class="empty-state">
 					<Zap size={48} />
@@ -281,6 +355,19 @@
 		border-radius: 10px;
 		font-weight: 700;
 		cursor: pointer;
+	}
+
+	.components-linear {
+		display: flex;
+		flex-direction: column;
+		gap: 1.5rem;
+	}
+
+	.components-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+		gap: 1.5rem;
+		align-items: start;
 	}
 
 	.header-block {
@@ -342,6 +429,55 @@
 		align-items: center;
 		gap: 1rem;
 		transition: all 0.2s;
+	}
+
+	.color-picker-container {
+		display: flex;
+		justify-content: center;
+		padding: 1rem;
+		background: var(--bg-main);
+		border: 1px solid var(--border-main);
+		border-radius: 8px;
+		margin-top: 0.5rem;
+	}
+
+	.color-input {
+		-webkit-appearance: none;
+		-moz-appearance: none;
+		appearance: none;
+		width: 48px;
+		height: 48px;
+		border: none;
+		border-radius: 50%;
+		padding: 0;
+		cursor: pointer;
+		overflow: hidden;
+		background: none;
+	}
+	.color-input::-webkit-color-swatch-wrapper {
+		padding: 0;
+	}
+	.color-input::-webkit-color-swatch {
+		border: 2px solid var(--border-main);
+		border-radius: 50%;
+	}
+	.color-input::-moz-color-swatch {
+		border: 2px solid var(--border-main);
+		border-radius: 50%;
+	}
+
+	.primary-btn {
+		width: 100%;
+		padding: 0.85rem;
+		background: var(--primary);
+		color: #ffffff;
+		border: none;
+		border-radius: 8px;
+		font-weight: 600;
+		font-size: 0.95rem;
+		cursor: pointer;
+		transition: opacity 0.2s;
+		margin-top: 1rem;
 	}
 
 	.list-item-card:hover {
@@ -454,6 +590,44 @@
 		color: var(--primary);
 		border-color: var(--primary);
 		background: rgba(var(--primary-rgb), 0.1);
+	}
+
+	.input-field {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		margin-bottom: 1rem;
+	}
+
+	.input-field label,
+	.iframe-field .field-label {
+		font-size: 0.85rem;
+		font-weight: 600;
+		color: var(--text-dim);
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+	}
+
+	.iframe-field {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		margin-bottom: 1rem;
+	}
+
+	.input-field input {
+		background: rgba(0, 0, 0, 0.2);
+		border: 1px solid var(--border-main);
+		padding: 0.75rem 1rem;
+		border-radius: 8px;
+		color: var(--text-main);
+		font-size: 0.95rem;
+		outline: none;
+		transition: border-color 0.2s;
+	}
+
+	.input-field input:focus {
+		border-color: var(--text-main);
 	}
 
 	:global(.spin) {

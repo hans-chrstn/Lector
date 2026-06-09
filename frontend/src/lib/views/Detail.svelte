@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { ArrowLeft } from 'lucide-svelte';
+	import ArrowLeft from 'lucide-svelte/icons/arrow-left';
 	import {
 		api,
-		type Document,
+		type Document as LectorDocument,
 		type Chapter,
 		type SearchItem,
 		type PluginManifest
@@ -16,7 +16,7 @@
 	import DetailModals from './detail/DetailModals.svelte';
 
 	interface Props {
-		document: Document;
+		document: LectorDocument;
 		sources?: string[];
 		onToggleLibrary: () => void;
 		onReadChapter: (chapter: Chapter) => void;
@@ -51,7 +51,7 @@
 	const isReady = $derived(document.chapters && document.chapters.length > 0);
 	const hasStarted = $derived(progress && progress.chapter_id);
 
-	const availableActions = $derived(() => {
+	const availableActions = $derived.by(() => {
 		const manifestActions = pluginManifests.flatMap((p) =>
 			(p.actions || [])
 				.filter((a) => a.context === 'document_detail' && a.method !== 'open_metadata_modal')
@@ -165,6 +165,16 @@
 		document.cover_url = res.url;
 	}
 
+	async function handleRefresh() {
+		try {
+			toast.success('Refreshing document...');
+			document = await api.refreshDocument(document.id);
+			toast.success('Document refreshed successfully');
+		} catch {
+			toast.error('Failed to refresh document');
+		}
+	}
+
 	function startPolling() {
 		stopPolling();
 		pollCount = 0;
@@ -206,12 +216,13 @@
 		bind:document
 		{isReady}
 		{hasStarted}
-		availableActions={availableActions() as any[]}
+		availableActions={availableActions as any[]}
 		onReadAction={handleReadAction}
 		{onToggleLibrary}
 		onEdit={() => (showEdit = true)}
 		onCoverUpload={handleCoverUpload}
 		onPluginAction={handlePluginAction}
+		onRefresh={handleRefresh}
 	/>
 
 	<DetailChapters

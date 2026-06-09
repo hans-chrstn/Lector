@@ -1,22 +1,20 @@
 <script lang="ts">
 	import { api, type PluginManifest } from '$lib/services/api';
 	import { toast } from '$lib/services/toast.svelte';
-	import {
-		Upload,
-		Trash2,
-		ShieldCheck,
-		FileCode,
-		ShieldAlert,
-		CheckCircle2,
-		Globe,
-		Database,
-		Layout,
-		History,
-		Zap,
-		GripVertical,
-		List,
-		Grid3X3
-	} from 'lucide-svelte';
+	import Upload from 'lucide-svelte/icons/upload';
+	import Trash2 from 'lucide-svelte/icons/trash-2';
+	import ShieldCheck from 'lucide-svelte/icons/shield-check';
+	import FileCode from 'lucide-svelte/icons/file-code';
+	import ShieldAlert from 'lucide-svelte/icons/shield-alert';
+	import CheckCircle2 from 'lucide-svelte/icons/check-circle-2';
+	import Globe from 'lucide-svelte/icons/globe';
+	import Database from 'lucide-svelte/icons/database';
+	import Layout from 'lucide-svelte/icons/layout';
+	import History from 'lucide-svelte/icons/history';
+	import Zap from 'lucide-svelte/icons/zap';
+	import GripVertical from 'lucide-svelte/icons/grip-vertical';
+	import List from 'lucide-svelte/icons/list';
+	import Grid3X3 from 'lucide-svelte/icons/grid-3x3';
 	import { clsx } from 'clsx';
 	import { fade } from 'svelte/transition';
 	import { untrack } from 'svelte';
@@ -88,7 +86,7 @@
 			selectedFile = null;
 		} catch (err: any) {
 			if (err.message && err.message.includes('409')) {
-				uploadPluginName = file.name.replace(/\.[^/.]+$/, "").toLowerCase();
+				uploadPluginName = file.name.replace(/\.[^/.]+$/, '').toLowerCase();
 				if (uploadPluginName === 'init') uploadPluginName = '';
 				showUploadModal = true;
 			} else {
@@ -96,7 +94,6 @@
 			}
 		}
 	}
-
 
 	async function handleUpload() {
 		if (!selectedFile) return;

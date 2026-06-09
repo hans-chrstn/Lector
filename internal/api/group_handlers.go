@@ -8,12 +8,12 @@ import (
 
 func (h *API) GetGroups(c *fiber.Ctx) error {
 	var g []models.Group
-	db.DB.Find(&g)
+	db.DB.WithContext(c.UserContext()).Find(&g)
 	return c.JSON(g)
 }
 
 func (h *API) CreateGroup(c *fiber.Ctx) error {
 	g := models.Group{Name: c.FormValue("name")}
-	db.DB.Create(&g)
+	db.DB.WithContext(c.UserContext()).Create(&g)
 	return c.JSON(g)
 }

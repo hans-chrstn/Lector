@@ -3,28 +3,121 @@ package plugin
 import (
 	"fmt"
 	"io"
-	"net"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/user/lector/internal/core/httpclient"
 )
+
+type NetworkProfile struct {
+	Name      string
+	UserAgent string
+	Headers   map[string]string
+}
 
 var (
-	GlobalTransport = &http.Transport{
-		MaxIdleConns:        100,
-		IdleConnTimeout:     90 * time.Second,
-		TLSHandshakeTimeout: 10 * time.Second,
-	}
-	HTTPClient = &http.Client{
-		Transport: GlobalTransport,
-		Timeout:   30 * time.Second,
+	Profiles = map[string]NetworkProfile{
+		"standard": {
+			Name:      "Standard Desktop",
+			UserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+			Headers: map[string]string{
+				"Accept":             "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+				"Accept-Language":    "en-US,en;q=0.9",
+				"Sec-CH-UA":          `"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"`,
+				"Sec-CH-UA-Mobile":   "?0",
+				"Sec-CH-UA-Platform": `"Windows"`,
+			},
+		},
+		"mobile": {
+			Name:      "Standard Mobile",
+			UserAgent: "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+			Headers: map[string]string{
+				"Accept":             "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+				"Accept-Language":    "en-US,en;q=0.9",
+				"Sec-CH-UA":          `"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"`,
+				"Sec-CH-UA-Mobile":   "?1",
+				"Sec-CH-UA-Platform": `"Android"`,
+			},
+		},
 	}
 )
 
-func (s *LuaPlugin) Fetch(method, u, postData, referer string, isAjax bool) string {
+type ClientManager struct {
+	clients map[string]*http.Client
+	mu      sync.Mutex
+}
+
+var GlobalClientManager = &ClientManager{
+	clients: make(map[string]*http.Client),
+}
+
+type CadenceManager struct {
+	lastRequest map[string]time.Time
+	mu          sync.Mutex
+}
+
+var GlobalCadenceManager = &CadenceManager{
+	lastRequest: make(map[string]time.Time),
+}
+
+func (m *CadenceManager) Wait(pluginName string, minMs, maxMs int) {
+	m.mu.Lock()
+	last := m.lastRequest[pluginName]
+	m.mu.Unlock()
+
+	elapsed := time.Since(last)
+	rangeMs := maxMs - minMs
+	if rangeMs < 1 {
+		rangeMs = 1
+	}
+	delay := time.Duration(minMs+int(time.Now().UnixNano()%int64(rangeMs))) * time.Millisecond
+
+	if elapsed < delay {
+		time.Sleep(delay - elapsed)
+	}
+
+	m.mu.Lock()
+	m.lastRequest[pluginName] = time.Now()
+	m.mu.Unlock()
+}
+
+func (m *ClientManager) GetClient(pluginName string, profile NetworkProfile) *http.Client {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if client, ok := m.clients[pluginName]; ok {
+		return client
+	}
+
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{
+		Transport: httpclient.GlobalTransport,
+		Jar:       jar,
+		Timeout:   30 * time.Second,
+	}
+
+	m.clients[pluginName] = client
+	return client
+}
+
+func (s *LuaPlugin) Fetch(method, u, postData, referer string, isAjax bool, customHeaders map[string]string) string {
 	name := strings.TrimSuffix(filepath.Base(s.Path), ".lua")
+	profileName := s.NetworkProfileName
+	if profileName == "" {
+		profileName = "standard"
+	}
+	profile := Profiles[profileName]
+	if profile.Name == "" {
+		profile = Profiles["standard"]
+	}
+
+	GlobalCadenceManager.Wait(name, 200, 600)
 
 	if !s.HasCapability("network") {
 		fmt.Printf("[Security] [%s] Blocked unauthorized network request (Capability 'network' not enabled)\n", name)
@@ -54,10 +147,7 @@ func (s *LuaPlugin) Fetch(method, u, postData, referer string, isAjax bool) stri
 		return "ERROR: Unauthorized domain"
 	}
 
-	if isPrivateHost(parsed.Host) {
-		fmt.Printf("[Security] [%s] Blocked SSRF attempt to private host: %s\n", name, parsed.Host)
-		return "ERROR: Unauthorized access to local network"
-	}
+	client := GlobalClientManager.GetClient(name, profile)
 
 	var body io.Reader
 	if method == "POST" {
@@ -69,23 +159,31 @@ func (s *LuaPlugin) Fetch(method, u, postData, referer string, isAjax bool) stri
 		return ""
 	}
 
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36")
-	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,all/all;q=0.8")
-	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("User-Agent", profile.UserAgent)
+	for k, v := range profile.Headers {
+		req.Header.Set(k, v)
+	}
 
 	if isAjax {
 		req.Header.Set("X-Requested-With", "XMLHttpRequest")
 	}
 	if referer != "" {
 		req.Header.Set("Referer", referer)
+	} else {
+		req.Header.Set("Referer", parsed.Scheme+"://"+parsed.Host+"/")
 	}
+
 	if method == "POST" {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}
 
-	resp, err := HTTPClient.Do(req)
+	for k, v := range customHeaders {
+		req.Header.Set(k, v)
+	}
 
+	resp, err := client.Do(req)
 	if err != nil {
+		fmt.Printf("[Network] [%s] Request failed to %s: %v\n", name, u, err)
 		return ""
 	}
 	defer resp.Body.Close()
@@ -93,39 +191,103 @@ func (s *LuaPlugin) Fetch(method, u, postData, referer string, isAjax bool) stri
 	out, _ := io.ReadAll(resp.Body)
 	content := string(out)
 
-	if strings.Contains(content, "cf-browser-verification") || resp.StatusCode == 403 {
-		fmt.Printf("[Plugin] [%s] Anti-Bot detected at %s\n", name, u)
+	if resp.StatusCode == 403 {
+		fmt.Printf("[Network] [%s] Compatibility warning (403) at %s\n", name, u)
 	}
 
 	return content
 }
 
-func isPrivateHost(host string) bool {
-	hostname, _, err := net.SplitHostPort(host)
-	if err != nil {
-		hostname = host
+func (s *LuaPlugin) Download(u, destPath, referer string, customHeaders map[string]string) bool {
+	name := strings.TrimSuffix(filepath.Base(s.Path), ".lua")
+	profileName := s.NetworkProfileName
+	if profileName == "" {
+		profileName = "standard"
+	}
+	profile := Profiles[profileName]
+	if profile.Name == "" {
+		profile = Profiles["standard"]
 	}
 
-	if hostname == "localhost" {
-		return true
+	GlobalCadenceManager.Wait(name, 200, 600)
+
+	if !s.HasCapability("network") {
+		return false
 	}
 
-	ips, err := net.LookupIP(hostname)
+	parsed, err := url.Parse(u)
 	if err != nil {
 		return false
 	}
 
-	for _, ip := range ips {
-		if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
-			return true
-		}
-		if ip4 := ip.To4(); ip4 != nil {
-			if ip4[0] == 10 ||
-				(ip4[0] == 172 && ip4[1] >= 16 && ip4[1] <= 31) ||
-				(ip4[0] == 192 && ip4[1] == 168) {
-				return true
+	allowed := false
+	if len(s.Permissions) == 0 {
+		allowed = true
+	} else {
+		for _, domain := range s.Permissions {
+			if domain == "*" || strings.HasSuffix(parsed.Host, domain) {
+				allowed = true
+				break
 			}
 		}
 	}
-	return false
+
+	if !allowed {
+		return false
+	}
+
+	client := GlobalClientManager.GetClient(name, profile)
+
+	req, err := http.NewRequest("GET", u, nil)
+	if err != nil {
+		return false
+	}
+
+	req.Header.Set("User-Agent", profile.UserAgent)
+	for k, v := range profile.Headers {
+		req.Header.Set(k, v)
+	}
+
+	if referer != "" {
+		req.Header.Set("Referer", referer)
+	} else {
+		req.Header.Set("Referer", parsed.Scheme+"://"+parsed.Host+"/")
+	}
+
+	for k, v := range customHeaders {
+		req.Header.Set(k, v)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		return false
+	}
+
+	baseDir, _ := filepath.Abs("downloads")
+	baseDir = filepath.Clean(baseDir)
+	fullPath, _ := filepath.Abs(destPath)
+	fullPath = filepath.Clean(fullPath)
+
+	if fullPath != baseDir && !strings.HasPrefix(fullPath, baseDir+string(filepath.Separator)) {
+		return false
+	}
+
+	dir := filepath.Dir(fullPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return false
+	}
+
+	out, err := os.Create(fullPath)
+	if err != nil {
+		return false
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, resp.Body)
+	return err == nil
 }

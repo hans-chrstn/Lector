@@ -4,10 +4,13 @@ import (
 	"os"
 	"testing"
 
+	"github.com/user/lector/internal/db"
 	"github.com/user/lector/internal/plugin"
+	"github.com/user/lector/internal/repository"
 )
 
 func TestLuaPlugin(t *testing.T) {
+	db.InitDB(":memory:")
 	luaCode := `
 		app.enable_capability("source")
 		function search(q) return {{title="Test", url="mock://test", cover_url="", info="info"}} end
@@ -20,7 +23,7 @@ func TestLuaPlugin(t *testing.T) {
 	}
 	defer os.Remove("mock_plugin.lua")
 
-	s, err := plugin.NewLuaPlugin("test", "mock_plugin.lua")
+	s, err := plugin.NewLuaPlugin("test", "mock_plugin.lua", repository.NewPluginRepository())
 	if err != nil {
 		t.Fatalf("Failed to load plugin: %v", err)
 	}
@@ -41,6 +44,7 @@ func TestLuaPlugin(t *testing.T) {
 }
 
 func TestModularPluginSupport(t *testing.T) {
+	db.InitDB(":memory:")
 	t.Run("Lua Defined ID", func(t *testing.T) {
 		luaCode := `
 			app.enable_capability("ui")
@@ -50,7 +54,7 @@ func TestModularPluginSupport(t *testing.T) {
 		os.WriteFile("id_test.lua", []byte(luaCode), 0644)
 		defer os.Remove("id_test.lua")
 
-		p, err := plugin.NewLuaPlugin("initial_name", "id_test.lua")
+		p, err := plugin.NewLuaPlugin("initial_name", "id_test.lua", repository.NewPluginRepository())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -67,7 +71,7 @@ func TestModularPluginSupport(t *testing.T) {
 		os.WriteFile("action_test.lua", []byte(luaCode), 0644)
 		defer os.Remove("action_test.lua")
 
-		p, err := plugin.NewLuaPlugin("test", "action_test.lua")
+		p, err := plugin.NewLuaPlugin("test", "action_test.lua", repository.NewPluginRepository())
 		if err != nil {
 			t.Fatal(err)
 		}

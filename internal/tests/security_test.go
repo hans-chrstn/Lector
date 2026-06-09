@@ -16,8 +16,10 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/basicauth"
 	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/user/lector/internal/api"
+	"github.com/user/lector/internal/core/sanitizer"
 	"github.com/user/lector/internal/db"
 	"github.com/user/lector/internal/plugin"
+	"github.com/user/lector/internal/repository"
 	"github.com/user/lector/internal/services"
 )
 
@@ -50,7 +52,11 @@ func TestUploadSecurityHardening(t *testing.T) {
 	defer os.RemoveAll("uploads")
 
 	plugins := make(map[string]*plugin.LuaPlugin)
-	api.RegisterRoutes(app, plugins)
+	engine := &plugin.PluginEngine{
+		Store:   repository.NewPluginRepository(),
+		Plugins: plugins,
+	}
+	api.RegisterRoutes(app, engine)
 
 	t.Run("UUID Renaming", func(t *testing.T) {
 		epubData, _ := createMockEPUB()
@@ -189,7 +195,7 @@ func TestRateLimiting(t *testing.T) {
 func TestStoredXSSProtection(t *testing.T) {
 	t.Run("Strips Script Tags", func(t *testing.T) {
 		html := `<div>Hello<script>alert("XSS")</script> World</div>`
-		sanitized := plugin.CleanHTML(html, "")
+		sanitized := sanitizer.CleanHTML(html, "")
 		if strings.Contains(sanitized, "<script>") {
 			t.Errorf("Script tag was not removed")
 		}
@@ -197,7 +203,7 @@ func TestStoredXSSProtection(t *testing.T) {
 
 	t.Run("Strips Event Handlers", func(t *testing.T) {
 		html := `<img src="x" onerror="alert(1)">`
-		sanitized := plugin.CleanHTML(html, "")
+		sanitized := sanitizer.CleanHTML(html, "")
 		if strings.Contains(sanitized, "onerror") {
 			t.Errorf("Event handler (onerror) was not removed")
 		}
@@ -205,7 +211,7 @@ func TestStoredXSSProtection(t *testing.T) {
 
 	t.Run("Strips Javascript Links", func(t *testing.T) {
 		html := `<a href="javascript:alert(1)">Click Me</a>`
-		sanitized := plugin.CleanHTML(html, "")
+		sanitized := sanitizer.CleanHTML(html, "")
 		if strings.Contains(sanitized, "javascript:") {
 			t.Errorf("Javascript link was not removed")
 		}
@@ -213,7 +219,7 @@ func TestStoredXSSProtection(t *testing.T) {
 
 	t.Run("Preserves Safe Content", func(t *testing.T) {
 		html := `<h1>Title</h1><p>This is <b>bold</b> and <i>italic</i>.</p><img src="/uploads/test.jpg">`
-		sanitized := plugin.CleanHTML(html, "")
+		sanitized := sanitizer.CleanHTML(html, "")
 		if !strings.Contains(sanitized, "<h1>Title</h1>") || !strings.Contains(sanitized, "<b>bold</b>") {
 			t.Errorf("Safe HTML was incorrectly removed")
 		}
@@ -222,7 +228,12 @@ func TestStoredXSSProtection(t *testing.T) {
 
 func TestLFIPolish(t *testing.T) {
 	app := fiber.New()
-	api.RegisterRoutes(app, nil)
+	db.InitDB(":memory:")
+	engine := &plugin.PluginEngine{
+		Store:   repository.NewPluginRepository(),
+		Plugins: make(map[string]*plugin.LuaPlugin),
+	}
+	api.RegisterRoutes(app, engine)
 
 	t.Run("Image Proxy Blocks Traversal", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/api/proxy-image?url=uploads/../../etc/passwd", nil)

@@ -10,17 +10,17 @@ import (
 )
 
 type API struct {
-	Plugins         map[string]*plugin.LuaPlugin
+	Engine          *plugin.PluginEngine
 	DocumentService services.DocumentService
 }
 
-func RegisterRoutes(app *fiber.App, plugins map[string]*plugin.LuaPlugin) {
+func RegisterRoutes(app *fiber.App, engine *plugin.PluginEngine) {
 	docRepo := repository.NewRepository[models.Document](db.DB)
 	chapterRepo := repository.NewRepository[models.Chapter](db.DB)
 	docService := services.NewDocumentService(docRepo, chapterRepo)
 
 	h := &API{
-		Plugins:         plugins,
+		Engine:          engine,
 		DocumentService: docService,
 	}
 
@@ -34,6 +34,7 @@ func RegisterRoutes(app *fiber.App, plugins map[string]*plugin.LuaPlugin) {
 	api.Post("/plugins/:name/toggle", h.TogglePlugin)
 	api.Delete("/plugins/:name", h.DeletePlugin)
 	api.Post("/plugins/:name/rpc/:method", h.PluginRPC)
+	api.Get("/plugins/:name/assets/*", h.ServePluginAsset)
 
 	api.Get("/search", h.Search)
 	api.Get("/discovery/search", h.Search)
@@ -41,22 +42,29 @@ func RegisterRoutes(app *fiber.App, plugins map[string]*plugin.LuaPlugin) {
 	api.Get("/documents", h.GetDocuments)
 	api.Get("/documents/search", h.SearchLibrary)
 	api.Post("/documents/ensure", h.EnsureDocument)
+	api.Post("/documents/batch/refresh", h.BatchRefreshDocuments)
+	api.Delete("/documents/batch", h.BatchDeleteDocuments)
+	api.Post("/documents/batch/move", h.BatchMoveDocuments)
+	api.Post("/documents/batch/archive", h.BatchArchiveDocuments)
+	api.Post("/documents/batch/mark-read", h.BatchMarkReadDocuments)
+
 	api.Get("/documents/:id", h.GetDocumentByID)
 	api.Post("/documents/:id/library", h.ToggleLibrary)
 	api.Put("/documents/:id/metadata", h.UpdateMetadata)
 	api.Post("/documents/:id/cover", h.UpdateCover)
 	api.Get("/documents/:id/progress", h.GetDocumentProgress)
+	api.Post("/documents/:id/refresh", h.RefreshDocument)
 	api.Post("/documents/:id/migrate", h.MigrateDocument)
 	api.Get("/documents/:id/export", h.ExportDocument)
 	api.Get("/documents/:id/archive-image", h.GetArchiveImage)
-	api.Delete("/documents/batch", h.BatchDeleteDocuments)
-	api.Post("/documents/batch/move", h.BatchMoveDocuments)
-	api.Post("/documents/batch/archive", h.BatchArchiveDocuments)
-	api.Post("/documents/batch/mark-read", h.BatchMarkReadDocuments)
+
 	api.Get("/history", h.GetHistory)
 	api.Delete("/history", h.ClearHistory)
 	api.Delete("/history/batch", h.BatchDeleteHistory)
 	api.Delete("/history/:id", h.DeleteHistory)
+
+	api.Post("/analytics/track", h.TrackAnalytics)
+	api.Get("/analytics", h.GetAnalytics)
 
 	api.Get("/library/paths", h.GetLibraryPaths)
 	api.Post("/library/paths", h.AddLibraryPath)
@@ -73,6 +81,8 @@ func RegisterRoutes(app *fiber.App, plugins map[string]*plugin.LuaPlugin) {
 
 	api.Post("/upload", h.HandleUpload)
 	api.Get("/proxy-image", h.ProxyImage)
+	api.Get("/proxy-stream", h.ProxyStream)
+	api.Get("/proxy-segment/:b64url/:b64ref/*", h.ProxySegment)
 
 	api.Get("/documents/:documentId/bookmarks", h.GetBookmarks)
 	api.Post("/bookmarks", h.AddBookmark)

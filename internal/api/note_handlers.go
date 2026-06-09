@@ -11,17 +11,17 @@ func (h *API) AddNote(c *fiber.Ctx) error {
 	if err := c.BodyParser(&n); err != nil {
 		return err
 	}
-	db.DB.Create(&n)
+	db.DB.WithContext(c.UserContext()).Create(&n)
 	return c.JSON(n)
 }
 
 func (h *API) GetNotes(c *fiber.Ctx) error {
 	var n []models.Note
-	db.DB.Where("document_id = ?", c.Params("documentId")).Order("created_at DESC").Find(&n)
+	db.DB.WithContext(c.UserContext()).Where("document_id = ?", c.Params("documentId")).Order("created_at DESC").Find(&n)
 	return c.JSON(n)
 }
 
 func (h *API) DeleteNote(c *fiber.Ctx) error {
-	db.DB.Delete(&models.Note{}, c.Params("id"))
+	db.DB.WithContext(c.UserContext()).Delete(&models.Note{}, c.Params("id"))
 	return c.SendString("Deleted")
 }

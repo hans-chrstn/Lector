@@ -80,7 +80,7 @@ func (h *API) GetOPDSAll(c *fiber.Ctx) error {
 	}
 
 	var documents []models.Document
-	db.DB.Find(&documents)
+	db.DB.WithContext(c.UserContext()).Find(&documents)
 
 	feed := OPDSFeed{
 		ID:      "urn:lector:all",

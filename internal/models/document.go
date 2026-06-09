@@ -21,6 +21,7 @@ type Document struct {
 	Synopsis    string    `json:"synopsis"`
 	Genres      string    `json:"genres"`
 	Status      string    `json:"status"`
+	Type        string    `gorm:"default:'text';index" json:"type"`
 	IsInLibrary bool      `gorm:"default:false" json:"is_in_library"`
 	IsArchived  bool      `gorm:"default:false" json:"is_archived"`
 	IsLocal     bool      `gorm:"default:false" json:"is_local"`

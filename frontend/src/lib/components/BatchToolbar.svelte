@@ -1,14 +1,13 @@
 <script lang="ts">
-	import {
-		ChevronDown,
-		Trash2,
-		Archive,
-		ArchiveRestore,
-		BookOpen,
-		BookOpenCheck,
-		CheckSquare,
-		Square
-	} from 'lucide-svelte';
+	import ChevronDown from 'lucide-svelte/icons/chevron-down';
+	import Trash2 from 'lucide-svelte/icons/trash-2';
+	import Archive from 'lucide-svelte/icons/archive';
+	import ArchiveRestore from 'lucide-svelte/icons/archive-restore';
+	import BookOpen from 'lucide-svelte/icons/book-open';
+	import BookOpenCheck from 'lucide-svelte/icons/book-open-check';
+	import CheckSquare from 'lucide-svelte/icons/check-square';
+	import Square from 'lucide-svelte/icons/square';
+	import RefreshCw from 'lucide-svelte/icons/refresh-cw';
 
 	import { type Group } from '$lib/services/api';
 
@@ -75,6 +74,11 @@
 			<button class="action-btn" onclick={() => onAction('mark-unread')} title="Mark All Unread">
 				<BookOpen size={16} />
 				<span class="label">Unread</span>
+			</button>
+
+			<button class="action-btn" onclick={() => onAction('refresh')} title="Refresh Selected">
+				<RefreshCw size={16} />
+				<span class="label">Refresh</span>
 			</button>
 
 			<button

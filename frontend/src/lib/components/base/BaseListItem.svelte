@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { ChevronRight } from 'lucide-svelte';
+	import ChevronRight from 'lucide-svelte/icons/chevron-right';
 
 	interface Props {
 		onclick: () => void;

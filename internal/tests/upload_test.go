@@ -15,6 +15,7 @@ import (
 	"github.com/user/lector/internal/db"
 	"github.com/user/lector/internal/models"
 	"github.com/user/lector/internal/plugin"
+	"github.com/user/lector/internal/repository"
 	"github.com/user/lector/internal/services"
 )
 
@@ -65,8 +66,11 @@ func TestUploadAPI(t *testing.T) {
 	services.EnsureUploadsDir()
 	defer os.RemoveAll("uploads")
 
-	plugins := make(map[string]*plugin.LuaPlugin)
-	api.RegisterRoutes(app, plugins)
+	engine := &plugin.PluginEngine{
+		Store:   repository.NewPluginRepository(),
+		Plugins: make(map[string]*plugin.LuaPlugin),
+	}
+	api.RegisterRoutes(app, engine)
 
 	epubData, _ := createMockEPUB()
 

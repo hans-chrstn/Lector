@@ -24,14 +24,14 @@ func getPluginDir() string {
 func (h *API) UploadPlugin(c *fiber.Ctx) error {
 	file, err := c.FormFile("plugin")
 	if err != nil {
-		return c.Status(400).SendString("No file uploaded")
+		return c.Status(400).JSON(fiber.Map{"error": "No file uploaded"})
 	}
 
 	name := strings.ToLower(strings.TrimSpace(c.FormValue("name")))
 	ext := strings.ToLower(filepath.Ext(file.Filename))
 
 	if ext != ".zip" && ext != ".lua" {
-		return c.Status(400).SendString("Only .zip or .lua files are allowed")
+		return c.Status(400).JSON(fiber.Map{"error": "Only .zip or .lua files are allowed"})
 	}
 
 	pluginDir := getPluginDir()
@@ -40,7 +40,7 @@ func (h *API) UploadPlugin(c *fiber.Ctx) error {
 	tempName := fmt.Sprintf("temp_%d", time.Now().UnixNano())
 	tempPath := filepath.Join(pluginDir, tempName+ext)
 	if err := c.SaveFile(file, tempPath); err != nil {
-		return c.Status(500).SendString("Failed to save upload")
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to save upload"})
 	}
 	defer os.RemoveAll(tempPath)
 
@@ -48,7 +48,7 @@ func (h *API) UploadPlugin(c *fiber.Ctx) error {
 	var destDir string
 
 	if ext == ".lua" {
-		p, err := plugin.NewLuaPlugin("probe", tempPath)
+		p, err := plugin.NewLuaPlugin("probe", tempPath, h.Engine.Store)
 		if err == nil {
 			if p.Name != "probe" {
 				detectedID = p.Name
@@ -63,7 +63,7 @@ func (h *API) UploadPlugin(c *fiber.Ctx) error {
 		if finalID == "" {
 			baseName := strings.ToLower(strings.TrimSuffix(file.Filename, ext))
 			if baseName == "init" {
-				return c.Status(409).SendString("Generic filename detected. Please provide a plugin name.")
+				return c.Status(409).JSON(fiber.Map{"error": "Generic filename detected. Please provide a plugin name."})
 			}
 			finalID = baseName
 		}
@@ -71,7 +71,7 @@ func (h *API) UploadPlugin(c *fiber.Ctx) error {
 		destDir = filepath.Join(pluginDir, finalID)
 		os.MkdirAll(destDir, 0755)
 		if err := os.Rename(tempPath, filepath.Join(destDir, "init.lua")); err != nil {
-			return c.Status(500).SendString("Failed to move plugin")
+			return c.Status(500).JSON(fiber.Map{"error": "Failed to move plugin"})
 		}
 		name = finalID
 	} else {
@@ -83,14 +83,14 @@ func (h *API) UploadPlugin(c *fiber.Ctx) error {
 
 		r, err := zip.OpenReader(tempPath)
 		if err != nil {
-			return c.Status(400).SendString("Invalid zip file")
+			return c.Status(400).JSON(fiber.Map{"error": "Invalid zip file"})
 		}
 		defer r.Close()
 
 		for _, f := range r.File {
 			fpath := filepath.Join(destDir, f.Name)
 			if !strings.HasPrefix(fpath, filepath.Clean(destDir)+string(os.PathSeparator)) {
-				return c.Status(400).SendString("Invalid file path in zip")
+				return c.Status(400).JSON(fiber.Map{"error": "Invalid file path in zip"})
 			}
 			if f.FileInfo().IsDir() {
 				os.MkdirAll(fpath, 0755)
@@ -105,7 +105,7 @@ func (h *API) UploadPlugin(c *fiber.Ctx) error {
 		}
 
 		entryPoint := filepath.Join(destDir, "init.lua")
-		p, err := plugin.NewLuaPlugin("probe", entryPoint)
+		p, err := plugin.NewLuaPlugin("probe", entryPoint, h.Engine.Store)
 		if err == nil {
 			detectedID = p.Name
 			p.L.Close()
@@ -122,17 +122,17 @@ func (h *API) UploadPlugin(c *fiber.Ctx) error {
 	}
 
 	finalEntryPoint := filepath.Join(pluginDir, name, "init.lua")
-	testPlugin, err := plugin.NewLuaPlugin(name, finalEntryPoint)
+	testPlugin, err := plugin.NewLuaPlugin(name, finalEntryPoint, h.Engine.Store)
 	if err != nil {
 		os.RemoveAll(filepath.Join(pluginDir, name))
-		return c.Status(400).SendString(fmt.Sprintf("Invalid plugin: %v", err))
+		return c.Status(400).JSON(fiber.Map{"error": fmt.Sprintf("Invalid plugin: %v", err)})
 	}
 
-	h.Plugins[name] = testPlugin
+	h.Engine.Plugins[name] = testPlugin
 	var dbP models.Plugin
-	if err := db.DB.Where("name = ?", name).First(&dbP).Error; err != nil {
+	if err := db.DB.WithContext(c.UserContext()).Where("name = ?", name).First(&dbP).Error; err != nil {
 		dbP = models.Plugin{Name: name, IsEnabled: true}
-		db.DB.Create(&dbP)
+		db.DB.WithContext(c.UserContext()).Create(&dbP)
 	}
 
 	return c.JSON(fiber.Map{"status": "success", "name": name})
@@ -171,14 +171,14 @@ func (h *API) GetPluginsManifest(c *fiber.Ctx) error {
 		}
 
 		var p models.Plugin
-		if err := db.DB.Where("name = ?", name).First(&p).Error; err != nil {
+		if err := db.DB.WithContext(c.UserContext()).Where("name = ?", name).First(&p).Error; err != nil {
 			p = models.Plugin{Name: name, IsEnabled: true}
-			db.DB.Create(&p)
+			db.DB.WithContext(c.UserContext()).Create(&p)
 		}
 	}
 
 	var dbPlugins []models.Plugin
-	db.DB.Order("priority ASC, name ASC").Find(&dbPlugins)
+	db.DB.WithContext(c.UserContext()).Order("priority ASC, name ASC").Find(&dbPlugins)
 
 	manifests := []PluginManifest{}
 	for _, p := range dbPlugins {
@@ -195,31 +195,31 @@ func (h *API) GetPluginsManifest(c *fiber.Ctx) error {
 		}
 
 		if sPath == "" {
-			if _, exists := h.Plugins[name]; exists {
-				delete(h.Plugins, name)
+			if _, exists := h.Engine.Plugins[name]; exists {
+				delete(h.Engine.Plugins, name)
 			}
 			continue
 		}
 
 		if p.IsEnabled {
-			s, exists := h.Plugins[name]
+			s, exists := h.Engine.Plugins[name]
 			if !exists || (info != nil && info.ModTime().After(s.LoadedAt)) {
-				if newS, err := plugin.NewLuaPlugin(name, sPath); err == nil {
+				if newS, err := plugin.NewLuaPlugin(name, sPath, h.Engine.Store); err == nil {
 					newS.LoadedAt = info.ModTime()
-					h.Plugins[name] = newS
+					h.Engine.Plugins[name] = newS
 				}
 			}
 		} else {
-			delete(h.Plugins, name)
+			delete(h.Engine.Plugins, name)
 		}
 
 		m := PluginManifest{
 			Name:      name,
 			IsEnabled: p.IsEnabled,
-			IsLoaded:  h.Plugins[name] != nil,
+			IsLoaded:  h.Engine.Plugins[name] != nil,
 		}
 
-		if s, ok := h.Plugins[name]; ok {
+		if s, ok := h.Engine.Plugins[name]; ok {
 			m.IsVerified = s.IsVerified
 			m.Tabs = s.Tabs
 			m.Sections = s.Sections
@@ -238,18 +238,18 @@ func (h *API) GetPluginsManifest(c *fiber.Ctx) error {
 
 func (h *API) GetPlugins(c *fiber.Ctx) error {
 	var plugins []models.Plugin
-	db.DB.Order("priority ASC, name ASC").Find(&plugins)
+	db.DB.WithContext(c.UserContext()).Order("priority ASC, name ASC").Find(&plugins)
 	return c.JSON(plugins)
 }
 
 func (h *API) ReorderPlugins(c *fiber.Ctx) error {
 	var req []string
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(400).SendString("Invalid request")
+		return c.Status(400).JSON(fiber.Map{"error": "Invalid request"})
 	}
 
 	for i, name := range req {
-		db.DB.Model(&models.Plugin{}).Where("name = ?", strings.ToLower(name)).Update("priority", i)
+		db.DB.WithContext(c.UserContext()).Model(&models.Plugin{}).Where("name = ?", strings.ToLower(name)).Update("priority", i)
 	}
 
 	return c.SendString("Reordered")
@@ -258,12 +258,12 @@ func (h *API) ReorderPlugins(c *fiber.Ctx) error {
 func (h *API) TogglePlugin(c *fiber.Ctx) error {
 	name := strings.ToLower(c.Params("name"))
 	var p models.Plugin
-	if err := db.DB.Where("name = ?", name).First(&p).Error; err != nil {
-		return c.Status(404).SendString("Plugin not found")
+	if err := db.DB.WithContext(c.UserContext()).Where("name = ?", name).First(&p).Error; err != nil {
+		return c.Status(404).JSON(fiber.Map{"error": "Plugin not found"})
 	}
 
 	p.IsEnabled = !p.IsEnabled
-	db.DB.Save(&p)
+	db.DB.WithContext(c.UserContext()).Save(&p)
 
 	if p.IsEnabled {
 		pluginDir := getPluginDir()
@@ -274,12 +274,12 @@ func (h *API) TogglePlugin(c *fiber.Ctx) error {
 			sPath = filepath.Join(pluginDir, name+".lua")
 		}
 
-		s, err := plugin.NewLuaPlugin(name, sPath)
+		s, err := plugin.NewLuaPlugin(name, sPath, h.Engine.Store)
 		if err == nil {
-			h.Plugins[name] = s
+			h.Engine.Plugins[name] = s
 		}
 	} else {
-		delete(h.Plugins, name)
+		delete(h.Engine.Plugins, name)
 	}
 
 	return c.JSON(p)
@@ -298,8 +298,8 @@ func (h *API) DeletePlugin(c *fiber.Ctx) error {
 		os.Remove(filePath)
 	}
 
-	delete(h.Plugins, name)
-	db.DB.Where("name = ?", name).Delete(&models.Plugin{})
+	delete(h.Engine.Plugins, name)
+	db.DB.WithContext(c.UserContext()).Where("name = ?", name).Delete(&models.Plugin{})
 	return c.SendString("Deleted")
 }
 
@@ -307,29 +307,29 @@ func (h *API) PluginRPC(c *fiber.Ctx) error {
 	name := strings.ToLower(c.Params("name"))
 	method := c.Params("method")
 
-	p, ok := h.Plugins[name]
+	p, ok := h.Engine.Plugins[name]
 	if !ok {
-		return c.Status(404).SendString("Plugin not found")
+		return c.Status(404).JSON(fiber.Map{"error": "Plugin not found"})
 	}
 
 	p.Mu.Lock()
 	defer p.Mu.Unlock()
 
-	fn := p.L.GetGlobal(method)
-	if fn.Type() != lua.LTFunction {
-		globals := p.L.Get(lua.GlobalsIndex).(*lua.LTable)
-		globals.ForEach(func(k, v lua.LValue) {
-			if strings.EqualFold(k.String(), method) && v.Type() == lua.LTFunction {
-				fn = v
-			}
-		})
+	exports := p.L.GetGlobal("exports")
+	if exports.Type() != lua.LTTable {
+		if method == "get_document_actions" {
+			return c.JSON([]interface{}{})
+		}
+		return c.Status(403).JSON(fiber.Map{"error": fmt.Sprintf("Plugin %s does not export any functions (exports table not found)", name)})
 	}
+
+	fn := p.L.GetField(exports, method)
 
 	if fn.Type() != lua.LTFunction {
 		if method == "get_document_actions" {
 			return c.JSON([]interface{}{})
 		}
-		return c.Status(404).SendString(fmt.Sprintf("RPC method %s not found in plugin %s", method, name))
+		return c.Status(404).JSON(fiber.Map{"error": fmt.Sprintf("RPC method %s not found in plugin %s", method, name)})
 	}
 
 	body := string(c.Body())
@@ -342,7 +342,7 @@ func (h *API) PluginRPC(c *fiber.Ctx) error {
 	p.L.SetContext(ctx)
 
 	if err := p.L.CallByParam(lua.P{Fn: fn, NRet: 1, Protect: true}, lua.LString(body)); err != nil {
-		return c.Status(500).SendString(fmt.Sprintf("RPC error: %v", err))
+		return c.Status(500).JSON(fiber.Map{"error": fmt.Sprintf("RPC error: %v", err)})
 	}
 
 	ret := p.L.Get(-1)
@@ -389,4 +389,27 @@ func luaValueToInterface(v lua.LValue) interface{} {
 	default:
 		return nil
 	}
+}
+
+func (h *API) ServePluginAsset(c *fiber.Ctx) error {
+	name := strings.ToLower(c.Params("name"))
+	wildcardPath := c.Params("*")
+
+	if wildcardPath == "" {
+		return c.Status(400).SendString("No asset path provided")
+	}
+
+	cleanPath := filepath.Clean(wildcardPath)
+	if strings.HasPrefix(cleanPath, "..") {
+		return c.Status(403).SendString("Invalid path")
+	}
+
+	pluginDir := getPluginDir()
+	assetPath := filepath.Join(pluginDir, name, "assets", cleanPath)
+
+	if _, err := os.Stat(assetPath); os.IsNotExist(err) {
+		return c.Status(404).SendString("Asset not found")
+	}
+
+	return c.SendFile(assetPath)
 }

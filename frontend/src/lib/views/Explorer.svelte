@@ -2,7 +2,10 @@
 	import { onMount } from 'svelte';
 	import { api, type SearchItem } from '$lib/services/api';
 	import { clsx } from 'clsx';
-	import { Compass, LayoutGrid, List, RefreshCw } from 'lucide-svelte';
+	import Compass from 'lucide-svelte/icons/compass';
+	import LayoutGrid from 'lucide-svelte/icons/layout-grid';
+	import List from 'lucide-svelte/icons/list';
+	import RefreshCw from 'lucide-svelte/icons/refresh-cw';
 	import BasePage from '../components/base/BasePage.svelte';
 	import DocumentGridItem from '../components/DocumentGridItem.svelte';
 

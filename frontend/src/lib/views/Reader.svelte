@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
-	import { RotateCcw, CloudCheck } from 'lucide-svelte';
+	import RotateCcw from 'lucide-svelte/icons/rotate-ccw';
+	import CloudCheck from 'lucide-svelte/icons/cloud-check';
 	import { clsx } from 'clsx';
 	import { api, type PluginManifest } from '$lib/services/api';
 	import ProgressRing from '../components/ProgressRing.svelte';
@@ -10,18 +11,21 @@
 	import ReaderNotebook from '../components/reader/ReaderNotebook.svelte';
 	import ReaderFooter from '../components/reader/ReaderFooter.svelte';
 	import { toast } from '$lib/services/toast.svelte';
-	import { X, Loader2 } from 'lucide-svelte';
-
+	import X from 'lucide-svelte/icons/x';
+	import Loader2 from 'lucide-svelte/icons/loader-2';
 	interface Chapter {
 		id: number;
 		title: string;
 		order: number;
 		content?: string;
+		metadata?: string;
 	}
 
 	interface DocumentMeta {
 		id: number;
 		title: string;
+		type: 'text' | 'images' | 'stream';
+		source: string;
 		chapters: { id: number; title: string; order: number }[];
 	}
 
@@ -46,6 +50,15 @@
 		pluginManifests?: PluginManifest[];
 	}
 	let { chapter, document: doc, onClose, onReadChapter, pluginManifests = [] }: Props = $props();
+
+	let plugin = $derived(pluginManifests.find((p) => p.name === doc?.source));
+	let readerOverride = $derived.by(() => {
+		if (doc?.type) {
+			const globalPlugin = pluginManifests.find((p) => p.ui_overrides?.[`reader:${doc.type}`]);
+			if (globalPlugin) return globalPlugin.ui_overrides[`reader:${doc.type}`];
+		}
+		return plugin?.ui_overrides?.reader;
+	});
 
 	let settings = $state({
 		fontSize: 18,
@@ -91,12 +104,6 @@
 			(p.actions || [])
 				.filter((a: any) => a.context === 'selection')
 				.map((a: any) => ({ ...a, plugin: p.name }))
-		);
-		console.log(
-			'[Reader] Plugins available:',
-			pluginManifests.length,
-			'Selection actions found:',
-			actions.length
 		);
 		return actions;
 	});
@@ -307,9 +314,15 @@
 
 		init();
 		const progressInterval = setInterval(() => syncProgress(), 5000);
+		const analyticsInterval = setInterval(() => {
+			if (document.visibilityState === 'visible' && !isRestoring) {
+				api.trackAnalytics('time', 60);
+			}
+		}, 60000);
 
 		return () => {
 			clearInterval(progressInterval);
+			clearInterval(analyticsInterval);
 			window.document.removeEventListener('selectionchange', handleSelectionChange);
 			if (container) container.removeEventListener('scroll', handleScroll);
 			window.removeEventListener('pagehide', handleExitSync);
@@ -403,7 +416,40 @@
 	const currentIdxMeta = $derived(doc.chapters.findIndex((c) => c.id === currentInViewId));
 	const hasPrev = $derived(currentIdxMeta > 0);
 	const hasNext = $derived(currentIdxMeta < doc.chapters.length - 1);
+
+	function parseMetadata(metadata?: string) {
+		try {
+			return JSON.parse(metadata || '');
+		} catch {
+			return null;
+		}
+	}
 </script>
+
+{#snippet textView(ch: Chapter)}
+	<article class="prose">
+		{#if ch.content}
+			<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+			{@html ch.content}
+		{:else}
+			<div class="sync-error"><h3>Syncing...</h3></div>
+		{/if}
+	</article>
+{/snippet}
+
+{#snippet imagesView(ch: Chapter)}
+	<div class="images-viewer">
+		{#each parseMetadata(ch.metadata) || [] as img, i (i)}
+			<img
+				src={api.getProxyImage(img)}
+				alt="Page {i + 1}"
+				class="images-page"
+				loading="lazy"
+				onerror={(e) => ((e.currentTarget as HTMLElement).style.display = 'none')}
+			/>
+		{/each}
+	</div>
+{/snippet}
 
 {#if chapter}
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -471,32 +517,45 @@
 		{/if}
 
 		<main
-			class="reader-main"
+			class={clsx(
+				'reader-main',
+				readerOverride && readerOverride.type === 'iframe' && 'is-override'
+			)}
 			style="--font-size: {settings.fontSize}px; --line-height: {settings.lineHeight}; --p-spacing: {settings.paragraphSpacing}em; --side-margin: {settings.sideMargin}%; --top-margin: {settings.topMargin}px;"
 		>
-			{#each chaptersStack as ch (ch.id)}
-				<div class="chapter-block" data-ch-id={ch.id}>
-					<header class="chapter-header"><h1>{ch.title}</h1></header>
-					<article class="prose">
-						{#if ch.content}
-							<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-							{@html ch.content}
-						{:else}
-							<div class="sync-error"><h3>Syncing...</h3></div>
+			{#if readerOverride && readerOverride.type === 'iframe'}
+				<iframe
+					src={`${readerOverride.url}?doc_id=${doc.id}&ch_id=${currentInViewId || chapter.id}`}
+					style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; border: none; z-index: 100; background: #000;"
+					title={chapter.title}
+					allowfullscreen
+				></iframe>
+			{:else}
+				{#each chaptersStack as ch (ch.id)}
+					<div class={clsx('chapter-block', doc.type)} data-ch-id={ch.id}>
+						{#if doc.type !== 'stream'}
+							<header class="chapter-header"><h1>{ch.title}</h1></header>
 						{/if}
-					</article>
-					{#if settings.readingMode === 'infinite'}<div class="stack-divider"></div>{/if}
-				</div>
-			{/each}
 
-			{#if settings.readingMode !== 'infinite'}
-				<ReaderFooter {hasPrev} {hasNext} currentIdx={currentIdxMeta} onNavigate={navigate} />
-			{/if}
+						{#if doc.type === 'images'}
+							{@render imagesView(ch)}
+						{:else}
+							{@render textView(ch)}
+						{/if}
 
-			{#if isLoadingNext}
-				<div class="stack-loader">
-					<RotateCcw size={20} class="spin" /><span>Seamlessly loading next chapter...</span>
-				</div>
+						{#if settings.readingMode === 'infinite'}<div class="stack-divider"></div>{/if}
+					</div>
+				{/each}
+
+				{#if settings.readingMode !== 'infinite'}
+					<ReaderFooter {hasPrev} {hasNext} currentIdx={currentIdxMeta} onNavigate={navigate} />
+				{/if}
+
+				{#if isLoadingNext}
+					<div class="stack-loader">
+						<RotateCcw size={20} class="spin" /><span>Seamlessly loading next chapter...</span>
+					</div>
+				{/if}
 			{/if}
 		</main>
 
@@ -522,7 +581,10 @@
 		{/if}
 
 		{#if actionResult || actionLoading}
+			<!-- svelte-ignore a11y_click_events_have_key_events -->
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div class="definition-overlay" onclick={() => (actionResult = null)}>
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div class="definition-card" onclick={(e) => e.stopPropagation()}>
 					{#if actionLoading}
 						<div class="def-loader">
@@ -553,6 +615,8 @@
 										</ul>
 									</div>
 								{/each}
+							{:else if actionResult.message}
+								<p class="raw-result">{actionResult.message}</p>
 							{:else}
 								<p class="raw-result">{JSON.stringify(actionResult, null, 2)}</p>
 							{/if}
@@ -572,6 +636,7 @@
 		position: relative;
 		transition: background 0.3s ease;
 		overflow-x: hidden;
+		overflow-anchor: none;
 	}
 	button {
 		appearance: none;
@@ -628,6 +693,24 @@
 		font-size: var(--font-size);
 		line-height: var(--line-height);
 	}
+	:global(.reader-main.is-override) {
+		max-width: none !important;
+		width: 100% !important;
+		padding: 0 !important;
+		margin: 0 !important;
+		flex: 1 !important;
+		height: 100vh !important;
+		display: flex !important;
+		flex-direction: column !important;
+	}
+	:global(.stream) .reader-main {
+		max-width: 1200px;
+	}
+	:global(.images) .reader-main {
+		max-width: 1000px;
+		padding-left: 0;
+		padding-right: 0;
+	}
 	.chapter-header {
 		text-align: center;
 		margin-bottom: 3rem;
@@ -649,6 +732,34 @@
 		border-radius: 12px;
 		box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
 	}
+
+	.images-viewer {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0;
+	}
+	.images-page {
+		max-width: 100%;
+		height: auto;
+		display: block;
+	}
+
+	.stream-viewer {
+		width: 100%;
+		aspect-ratio: 16 / 9;
+		background: black;
+		border-radius: 12px;
+		overflow: hidden;
+		box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+	}
+	.stream-element,
+	.stream-frame {
+		width: 100%;
+		height: 100%;
+		display: block;
+	}
+
 	.stack-divider {
 		height: 1px;
 		background: var(--border-main);

@@ -10,13 +10,18 @@ import (
 	"github.com/user/lector/internal/api"
 	"github.com/user/lector/internal/db"
 	"github.com/user/lector/internal/models"
+	"github.com/user/lector/internal/plugin"
+	"github.com/user/lector/internal/repository"
 )
 
 func TestOPDSServer(t *testing.T) {
 	app := fiber.New()
 	db.InitDB(":memory:")
-
-	api.RegisterRoutes(app, nil)
+	engine := &plugin.PluginEngine{
+		Store:   repository.NewPluginRepository(),
+		Plugins: make(map[string]*plugin.LuaPlugin),
+	}
+	api.RegisterRoutes(app, engine)
 
 	t.Run("Root Feed Returns XML", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/api/opds", nil)

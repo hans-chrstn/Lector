@@ -1,22 +1,22 @@
 <script lang="ts">
-	import {
-		ShieldAlert,
-		Library,
-		FolderPlus,
-		Trash2,
-		RefreshCw,
-		Loader2,
-		HardDrive,
-		LayoutGrid
-	} from 'lucide-svelte';
+	import ShieldAlert from 'lucide-svelte/icons/shield-alert';
+	import Library from 'lucide-svelte/icons/library';
+	import FolderPlus from 'lucide-svelte/icons/folder-plus';
+	import Trash2 from 'lucide-svelte/icons/trash-2';
+	import RefreshCw from 'lucide-svelte/icons/refresh-cw';
+	import Loader2 from 'lucide-svelte/icons/loader-2';
+	import HardDrive from 'lucide-svelte/icons/hard-drive';
+	import LayoutGrid from 'lucide-svelte/icons/layout-grid';
 	import { onMount } from 'svelte';
 	import { api } from '$lib/services/api';
 	import BasePage from '../components/base/BasePage.svelte';
+	import DynamicSettings from '../components/DynamicSettings.svelte';
+	import type { PluginManifest } from '$lib/services/api';
 
 	interface Props {
-		sources: string[];
+		pluginManifests?: PluginManifest[];
 	}
-	let {}: Props = $props();
+	let { pluginManifests = [] }: Props = $props();
 
 	let libraryPaths = $state<{ id: number; path: string; pattern: string; is_system: boolean }[]>(
 		[]
@@ -205,6 +205,24 @@
 				</div>
 			</div>
 		</section>
+
+		{#each pluginManifests as plugin (plugin.name)}
+			{#if plugin.settings_groups && plugin.settings_groups.length > 0}
+				<section class="settings-section">
+					<div class="section-header">
+						<div class="header-info">
+							<div class="title-stack">
+								<h2>{plugin.name.charAt(0).toUpperCase() + plugin.name.slice(1)} Settings</h2>
+								<p>Configure options for this plugin</p>
+							</div>
+						</div>
+					</div>
+					{#each plugin.settings_groups as group (group.id)}
+						<DynamicSettings pluginName={plugin.name} groupId={group.id} />
+					{/each}
+				</section>
+			{/if}
+		{/each}
 	</div>
 </BasePage>
 

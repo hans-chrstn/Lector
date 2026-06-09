@@ -1,25 +1,54 @@
 <script lang="ts">
-	import { Search as SearchIcon, Loader2, Globe, Compass } from 'lucide-svelte';
+	import SearchIcon from 'lucide-svelte/icons/search';
+	import Loader2 from 'lucide-svelte/icons/loader-2';
+	import Globe from 'lucide-svelte/icons/globe';
+	import Compass from 'lucide-svelte/icons/compass';
 	import DocumentGridItem from '../components/DocumentGridItem.svelte';
 	import BasePage from '../components/base/BasePage.svelte';
 	import { clsx } from 'clsx';
-	import type { SearchItem } from '$lib/services/api';
+	import type { SearchItem, PluginManifest } from '$lib/services/api';
 
 	interface Props {
-		sources: string[];
+		plugins: PluginManifest[];
 		results: SearchItem[];
 		loading: boolean;
 		onSearch: (query: string, source: string) => void;
 		onSelect: (url: string, source: string) => void;
 	}
-	let { sources, results, loading, onSearch, onSelect }: Props = $props();
+	let { plugins, results, loading, onSearch, onSelect }: Props = $props();
 
 	let query = $state('');
 	let source = $state('all');
 
 	const filteredSources = $derived(
-		sources.filter((s) => s !== 'system_manager' && s !== 'source_manager')
+		plugins.filter((p) => p.is_enabled && p.capabilities?.includes('catalog')).map((p) => p.name)
 	);
+
+	let timeoutId: any;
+
+	$effect(() => {
+		const q = query;
+		const s = source;
+		if (timeoutId) {
+			clearTimeout(timeoutId);
+		}
+		if (q.trim() === '') {
+			return;
+		}
+		timeoutId = setTimeout(() => {
+			onSearch(q, s);
+		}, 300);
+		return () => {
+			if (timeoutId) {
+				clearTimeout(timeoutId);
+			}
+		};
+	});
+
+	function triggerSearch() {
+		if (timeoutId) clearTimeout(timeoutId);
+		onSearch(query, source);
+	}
 </script>
 
 <BasePage title="Discovery" subtitle="Find new titles across all your enabled sources">
@@ -31,10 +60,10 @@
 					type="text"
 					bind:value={query}
 					placeholder="Search titles..."
-					onkeydown={(e) => e.key === 'Enter' && onSearch(query, source)}
+					onkeydown={(e) => e.key === 'Enter' && triggerSearch()}
 				/>
 			</div>
-			<button class="search-btn" onclick={() => onSearch(query, source)} disabled={loading}>
+			<button class="search-btn" onclick={triggerSearch} disabled={loading}>
 				{#if loading}
 					<Loader2 size={18} class="spin" />
 				{:else}

@@ -1,5 +1,7 @@
 <script lang="ts">
-	import { X, Plus, Trash2 } from 'lucide-svelte';
+	import X from 'lucide-svelte/icons/x';
+	import Plus from 'lucide-svelte/icons/plus';
+	import Trash2 from 'lucide-svelte/icons/trash-2';
 	import { clsx } from 'clsx';
 
 	interface ChapterMeta {

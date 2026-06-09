@@ -1,16 +1,34 @@
 <script lang="ts">
-	import {
-		Play,
-		Download,
-		Library as LibraryIcon,
-		Edit3,
-		User,
-		BookOpen,
-		Tag,
-		Zap
-	} from 'lucide-svelte';
-	import * as Icons from 'lucide-svelte';
+	import Play from 'lucide-svelte/icons/play';
+	import Download from 'lucide-svelte/icons/download';
+	import LibraryIcon from 'lucide-svelte/icons/library';
+	import Edit3 from 'lucide-svelte/icons/edit-3';
+	import User from 'lucide-svelte/icons/user';
+	import BookOpen from 'lucide-svelte/icons/book-open';
+	import Tag from 'lucide-svelte/icons/tag';
+	import Zap from 'lucide-svelte/icons/zap';
+	import Compass from 'lucide-svelte/icons/compass';
+	import Settings from 'lucide-svelte/icons/settings';
+	import CloudDownload from 'lucide-svelte/icons/cloud-download';
+	import CloudUpload from 'lucide-svelte/icons/cloud-upload';
+	import FileText from 'lucide-svelte/icons/file-text';
+	import RefreshCw from 'lucide-svelte/icons/refresh-cw';
+	import Trash2 from 'lucide-svelte/icons/trash-2';
 	import { clsx } from 'clsx';
+
+	const IconMap: Record<string, any> = {
+		Compass,
+		Settings,
+		CloudDownload,
+		CloudUpload,
+		FileText,
+		RefreshCw,
+		Trash2,
+		Zap,
+		Tag,
+		User,
+		BookOpen
+	};
 	import type { Document } from '$lib/services/api';
 	import CoverImage from '../../components/CoverImage.svelte';
 
@@ -24,6 +42,7 @@
 		onEdit: () => void;
 		onCoverUpload: (file: File) => void;
 		onPluginAction: (plugin: string, method: string) => void;
+		onRefresh: () => void;
 	}
 
 	let {
@@ -35,7 +54,8 @@
 		onToggleLibrary,
 		onEdit,
 		onCoverUpload,
-		onPluginAction
+		onPluginAction,
+		onRefresh
 	}: Props = $props();
 
 	let coverInput: HTMLInputElement;
@@ -127,11 +147,20 @@
 			{#if isReady}
 				<button class="primary-btn" onclick={onReadAction}>
 					<Play size={18} fill="currentColor" />
-					<span>{hasStarted ? 'Continue reading' : 'Start reading'}</span>
+					<span
+						>{hasStarted ? 'Continue' : 'Start'}
+						{['stream', 'video'].includes(document.type?.toLowerCase() || '')
+							? 'watching'
+							: 'reading'}</span
+					>
 				</button>
 
 				{#if document.is_in_library}
-					{#if !availableActions.some((a) => a.label === 'Export EPUB' || a.label === 'Downloaded')}
+					<button class="secondary-btn" onclick={onRefresh}>
+						<RefreshCw size={18} />
+						<span>Refresh</span>
+					</button>
+					{#if !availableActions.some((a) => a.label === 'Export EPUB' || a.label === 'Downloaded' || a.label === 'Download Offline')}
 						<a
 							href={`${window.location.origin}/api/documents/${document.id}/export?format=epub`}
 							class="secondary-btn"
@@ -145,7 +174,7 @@
 				{/if}
 
 				{#each availableActions as action, i (i)}
-					{@const Icon = (Icons as any)[action.icon] || Zap}
+					{@const Icon = IconMap[action.icon] || Zap}
 					<button
 						class="secondary-btn"
 						onclick={() => onPluginAction(action.plugin, action.method)}
@@ -360,6 +389,7 @@
 
 	.main-actions {
 		display: flex;
+		flex-wrap: wrap;
 		gap: 1rem;
 		align-items: center;
 		margin-top: auto;
@@ -376,10 +406,13 @@
 		font-size: 1rem;
 		display: flex;
 		align-items: center;
+		justify-content: center;
 		gap: 1rem;
 		cursor: pointer;
 		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 		box-shadow: 0 8px 24px rgba(255, 255, 255, 0.1);
+		white-space: nowrap;
+		flex-shrink: 0;
 	}
 
 	.primary-btn:hover {
@@ -398,10 +431,13 @@
 		font-weight: 700;
 		display: flex;
 		align-items: center;
+		justify-content: center;
 		gap: 0.75rem;
 		cursor: pointer;
 		transition: all 0.2s;
 		text-decoration: none;
+		white-space: nowrap;
+		flex-shrink: 0;
 	}
 
 	.secondary-btn:hover {
@@ -469,6 +505,18 @@
 		}
 		h1 {
 			font-size: 2.25rem;
+		}
+	}
+
+	@media (max-width: 600px) {
+		.primary-btn,
+		.secondary-btn {
+			width: 100%;
+			height: 48px;
+		}
+		.icon-action-btn {
+			flex: 1;
+			height: 48px;
 		}
 	}
 </style>

@@ -2,7 +2,8 @@
 	import BaseListItem from './base/BaseListItem.svelte';
 	import ProgressRing from './ProgressRing.svelte';
 	import CoverImage from './CoverImage.svelte';
-	import { FileText, Globe } from 'lucide-svelte';
+	import FileText from 'lucide-svelte/icons/file-text';
+	import Globe from 'lucide-svelte/icons/globe';
 
 	interface Props {
 		title: string;

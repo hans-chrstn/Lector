@@ -1,6 +1,6 @@
 #!/bin/sh
 set -e
 
-chown -R appuser:appgroup /app/data /app/uploads /app/exports /app/plugins
+chown -R lector:lector /app/data /app/uploads /app/exports /app/plugins
 
-exec su-exec appuser "$@"
+exec su-exec lector "$@"

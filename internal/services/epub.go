@@ -12,9 +12,9 @@ import (
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/user/lector/internal/core/sanitizer"
 	"github.com/user/lector/internal/db"
 	"github.com/user/lector/internal/models"
-	"github.com/user/lector/internal/plugin"
 )
 
 type EPUBPackage struct {
@@ -342,7 +342,7 @@ func processEPUB(path string) (*models.Document, error) {
 		}
 
 		fixedBody := fixer.FixChapter(body, fullHref)
-		cleanBody := plugin.CleanHTML(fixedBody, chTitle)
+		cleanBody := sanitizer.CleanHTML(fixedBody, chTitle)
 
 		chapters = append(chapters, models.Chapter{
 			DocumentID: document.ID,

@@ -1,7 +1,25 @@
 <script lang="ts">
-	import { Settings, Compass, ChevronRight } from 'lucide-svelte';
-	import * as Icons from 'lucide-svelte';
+	import Compass from 'lucide-svelte/icons/compass';
+	import Settings from 'lucide-svelte/icons/settings';
+	import Library from 'lucide-svelte/icons/library';
+	import BookOpen from 'lucide-svelte/icons/book-open';
+	import Search from 'lucide-svelte/icons/search';
+	import Globe from 'lucide-svelte/icons/globe';
+	import List from 'lucide-svelte/icons/list';
+	import Clock from 'lucide-svelte/icons/clock';
+	import ChevronRight from 'lucide-svelte/icons/chevron-right';
 	import { clsx } from 'clsx';
+
+	const IconMap: Record<string, any> = {
+		Compass,
+		Settings,
+		Library,
+		BookOpen,
+		Search,
+		Globe,
+		List,
+		Clock
+	};
 
 	interface Tab {
 		id: string;
@@ -48,7 +66,7 @@
 	});
 
 	function getIcon(name: string) {
-		return (Icons as any)[name] || Compass;
+		return IconMap[name] || Compass;
 	}
 </script>
 

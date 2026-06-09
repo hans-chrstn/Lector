@@ -12,6 +12,7 @@ export interface Chapter {
 	title: string;
 	url: string;
 	content: string;
+	metadata: string;
 	order: number;
 	status: string;
 	is_read: boolean;
@@ -22,6 +23,7 @@ export interface Document {
 	title: string;
 	url: string;
 	source: string;
+	type: 'text' | 'images' | 'stream';
 	cover_url: string;
 	author: string;
 	studio: string;
@@ -98,4 +100,9 @@ export interface Note {
 	content: string;
 	quote: string;
 	created_at: string;
+}
+
+export interface SearchResponse {
+	results: SearchItem[];
+	errors: string[];
 }

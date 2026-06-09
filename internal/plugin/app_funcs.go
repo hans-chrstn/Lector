@@ -6,8 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/user/lector/internal/db"
-	"github.com/user/lector/internal/models"
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -28,13 +26,90 @@ func (s *LuaPlugin) registerAppFunctions() {
 	ui := s.L.NewTable()
 	s.L.SetField(ui, "set_override", s.L.NewFunction(s.uiSetOverride))
 	s.L.SetField(ui, "add_style", s.L.NewFunction(s.uiAddStyle))
+	s.L.SetField(ui, "open_stream", s.L.NewFunction(s.uiOpenStream))
+	s.L.SetField(ui, "open_gallery", s.L.NewFunction(s.uiOpenGallery))
 	s.L.SetField(app, "ui", ui)
 
 	store := s.L.NewTable()
 	s.L.SetField(store, "set", s.L.NewFunction(s.storeSet))
 	s.L.SetField(store, "get", s.L.NewFunction(s.storeGet))
 	s.L.SetField(app, "store", store)
+	net := s.L.NewTable()
+	s.L.SetField(net, "request", s.L.NewFunction(s.netRequest))
+	s.L.SetField(net, "set_profile", s.L.NewFunction(s.netSetProfile))
+	s.L.SetField(app, "net", net)
+
 	s.L.SetGlobal("app", app)
+}
+
+func (s *LuaPlugin) uiOpenStream(L *lua.LState) int {
+	if !s.HasCapability("ui") {
+		return 0
+	}
+	url := L.CheckString(1)
+	_ = L.OptTable(2, L.NewTable())
+	s.appLog(L)
+	fmt.Printf("[UI] Open Stream requested for %s\n", url)
+	return 0
+}
+
+func (s *LuaPlugin) uiOpenGallery(L *lua.LState) int {
+	if !s.HasCapability("ui") {
+		return 0
+	}
+	images := L.CheckTable(1)
+	s.appLog(L)
+	fmt.Printf("[UI] Open Gallery requested for %d images\n", images.Len())
+	return 0
+}
+
+func (s *LuaPlugin) netRequest(L *lua.LState) int {
+	if !s.HasCapability("network") {
+		L.Push(lua.LNil)
+		L.Push(lua.LString("Capability 'network' not enabled"))
+		return 2
+	}
+	method := L.CheckString(1)
+	u := L.CheckString(2)
+	options := L.OptTable(3, L.NewTable())
+
+	body := ""
+	if b := options.RawGetString("body"); b.Type() == lua.LTString {
+		body = b.String()
+	}
+
+	referer := ""
+	if r := options.RawGetString("referer"); r.Type() == lua.LTString {
+		referer = r.String()
+	}
+
+	isAjax := false
+	if a := options.RawGetString("is_ajax"); a.Type() == lua.LTBool {
+		isAjax = bool(a.(lua.LBool))
+	}
+
+	headers := make(map[string]string)
+	if h := options.RawGetString("headers"); h.Type() == lua.LTTable {
+		tbl := h.(*lua.LTable)
+		tbl.ForEach(func(k, v lua.LValue) {
+			headers[k.String()] = v.String()
+		})
+	}
+
+	res := s.Fetch(method, u, body, referer, isAjax, headers)
+	L.Push(lua.LString(res))
+	return 1
+}
+
+func (s *LuaPlugin) netSetProfile(L *lua.LState) int {
+	if !s.HasCapability("network") {
+		return 0
+	}
+	profile := L.CheckString(1)
+	s.Mu.Lock()
+	s.NetworkProfileName = profile
+	s.Mu.Unlock()
+	return 0
 }
 
 func (s *LuaPlugin) enableCapability(L *lua.LState) int {
@@ -68,7 +143,7 @@ func (s *LuaPlugin) HasCapability(name string) bool {
 func (s *LuaPlugin) addPermission(L *lua.LState) int {
 	name := s.Name
 	if !s.HasCapability("network") {
-		fmt.Printf("[Security] [%s] Blocked add_permission (Capability 'network' not enabled)\n", name)
+		L.RaiseError("[Security] [%s] Blocked %s (Capability '%s' not enabled)", name, "add_permission", "network")
 		return 0
 	}
 	domain := L.CheckString(1)
@@ -81,7 +156,7 @@ func (s *LuaPlugin) addPermission(L *lua.LState) int {
 func (s *LuaPlugin) addAction(L *lua.LState) int {
 	name := s.Name
 	if !s.HasCapability("ui") {
-		fmt.Printf("[Security] [%s] Blocked add_action (Capability 'ui' not enabled)\n", name)
+		L.RaiseError("[Security] [%s] Blocked %s (Capability '%s' not enabled)", name, "add_action", "ui")
 		return 0
 	}
 	context := L.CheckString(1)
@@ -102,7 +177,7 @@ func (s *LuaPlugin) setID(L *lua.LState) int {
 func (s *LuaPlugin) uiAddStyle(L *lua.LState) int {
 	name := s.Name
 	if !s.HasCapability("theming") {
-		fmt.Printf("[Security] [%s] Blocked ui.add_style (Capability 'theming' not enabled)\n", name)
+		L.RaiseError("[Security] [%s] Blocked %s (Capability '%s' not enabled)", name, "ui.add_style", "theming")
 		return 0
 	}
 	css := L.CheckString(1)
@@ -115,7 +190,7 @@ func (s *LuaPlugin) uiAddStyle(L *lua.LState) int {
 func (s *LuaPlugin) uiSetOverride(L *lua.LState) int {
 	name := s.Name
 	if !s.HasCapability("ui") {
-		fmt.Printf("[Security] [%s] Blocked ui.set_override (Capability 'ui' not enabled)\n", name)
+		L.RaiseError("[Security] [%s] Blocked %s (Capability '%s' not enabled)", name, "ui.set_override", "ui")
 		return 0
 	}
 	key := L.CheckString(1)
@@ -135,7 +210,7 @@ func (s *LuaPlugin) uiSetOverride(L *lua.LState) int {
 func (s *LuaPlugin) appRPC(L *lua.LState) int {
 	name := s.Name
 	if !s.HasCapability("interaction") {
-		fmt.Printf("[Security] [%s] Blocked app.rpc (Capability 'interaction' not enabled)\n", name)
+		L.RaiseError("[Security] [%s] Blocked %s (Capability '%s' not enabled)", name, "app.rpc", "interaction")
 		L.Push(lua.LNil)
 		L.Push(lua.LString("Capability 'interaction' not enabled"))
 		return 2
@@ -159,7 +234,13 @@ func (s *LuaPlugin) appRPC(L *lua.LState) int {
 
 	p.L.SetContext(L.Context())
 
-	fn := p.L.GetGlobal(method)
+	exports := p.L.GetGlobal("exports")
+	if exports.Type() != lua.LTTable {
+		L.Push(lua.LNil)
+		L.Push(lua.LString("Plugin has no exports defined"))
+		return 2
+	}
+	fn := p.L.GetField(exports, method)
 	if fn.Type() != lua.LTFunction {
 		L.Push(lua.LNil)
 		L.Push(lua.LString("Method not found"))
@@ -190,7 +271,7 @@ func (s *LuaPlugin) appLog(L *lua.LState) int {
 func (s *LuaPlugin) addTab(L *lua.LState) int {
 	name := s.Name
 	if !s.HasCapability("ui") {
-		fmt.Printf("[Security] [%s] Blocked add_tab (Capability 'ui' not enabled)\n", name)
+		L.RaiseError("[Security] [%s] Blocked %s (Capability '%s' not enabled)", name, "add_tab", "ui")
 		return 0
 	}
 	id := L.CheckString(1)
@@ -207,7 +288,7 @@ func (s *LuaPlugin) addTab(L *lua.LState) int {
 func (s *LuaPlugin) addSection(L *lua.LState) int {
 	name := s.Name
 	if !s.HasCapability("ui") {
-		fmt.Printf("[Security] [%s] Blocked add_section (Capability 'ui' not enabled)\n", name)
+		L.RaiseError("[Security] [%s] Blocked %s (Capability '%s' not enabled)", name, "add_section", "ui")
 		return 0
 	}
 	id := L.CheckString(1)
@@ -221,7 +302,7 @@ func (s *LuaPlugin) addSection(L *lua.LState) int {
 func (s *LuaPlugin) addSettingsGroup(L *lua.LState) int {
 	name := s.Name
 	if !s.HasCapability("ui") {
-		fmt.Printf("[Security] [%s] Blocked add_settings_group (Capability 'ui' not enabled)\n", name)
+		L.RaiseError("[Security] [%s] Blocked %s (Capability '%s' not enabled)", name, "add_settings_group", "ui")
 		return 0
 	}
 	id := L.CheckString(1)
@@ -235,21 +316,26 @@ func (s *LuaPlugin) addSettingsGroup(L *lua.LState) int {
 func (s *LuaPlugin) appSpawn(L *lua.LState) int {
 	name := s.Name
 	if !s.HasCapability("background") {
-		fmt.Printf("[Security] [%s] Blocked app.spawn (Capability 'background' not enabled)\n", name)
+		L.RaiseError("[Security] [%s] Blocked %s (Capability '%s' not enabled)", name, "app.spawn", "background")
 		return 0
 	}
 	funcName := L.CheckString(1)
 	argsStr := L.OptString(2, "{}")
 
 	go func() {
-		newL, err := NewLuaPlugin(s.Name, s.Path)
+		newL, err := NewLuaPlugin(s.Name, s.Path, s.Store)
 		if err != nil {
 			fmt.Printf("[Plugin] Spawn error: Failed to initialize isolated VM: %v\n", err)
 			return
 		}
 		defer newL.L.Close()
 
-		newL.L.SetContext(context.Background())
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		newL.L.SetContext(ctx)
+
+		stopMonitor := MonitorMemory(ctx, cancel, 50*1024*1024)
+		defer stopMonitor()
 
 		fn := newL.L.GetGlobal(funcName)
 		if fn.Type() != lua.LTFunction {
@@ -268,7 +354,7 @@ func (s *LuaPlugin) appSpawn(L *lua.LState) int {
 func (s *LuaPlugin) appSleep(L *lua.LState) int {
 	name := s.Name
 	if !s.HasCapability("background") {
-		fmt.Printf("[Security] [%s] Blocked app.sleep (Capability 'background' not enabled)\n", name)
+		L.RaiseError("[Security] [%s] Blocked %s (Capability '%s' not enabled)", name, "app.sleep", "background")
 		return 0
 	}
 	ms := L.CheckInt(1)
@@ -279,33 +365,29 @@ func (s *LuaPlugin) appSleep(L *lua.LState) int {
 func (s *LuaPlugin) storeSet(L *lua.LState) int {
 	name := s.Name
 	if !s.HasCapability("storage") {
-		fmt.Printf("[Security] [%s] Blocked store.set (Capability 'storage' not enabled)\n", name)
+		L.RaiseError("[Security] [%s] Blocked %s (Capability '%s' not enabled)", name, "store.set", "storage")
 		return 0
 	}
 	key := L.CheckString(1)
 	val := L.CheckString(2)
 	fullKey := fmt.Sprintf("plugin_%s_%s", name, key)
 
-	db.DB.Save(&models.CacheItem{
-		Key:   fullKey,
-		Value: []byte(val),
-	})
+	s.Store.SetCacheItem(fullKey, []byte(val))
 	return 0
 }
 
 func (s *LuaPlugin) storeGet(L *lua.LState) int {
 	name := s.Name
 	if !s.HasCapability("storage") {
-		fmt.Printf("[Security] [%s] Blocked store.get (Capability 'storage' not enabled)\n", name)
+		L.RaiseError("[Security] [%s] Blocked %s (Capability '%s' not enabled)", name, "store.get", "storage")
 		L.Push(lua.LNil)
 		return 1
 	}
 	key := L.CheckString(1)
 	fullKey := fmt.Sprintf("plugin_%s_%s", name, key)
 
-	var item models.CacheItem
-	if err := db.DB.Where("key = ?", fullKey).First(&item).Error; err == nil {
-		L.Push(lua.LString(string(item.Value)))
+	if val, ok := s.Store.GetCacheItem(fullKey); ok {
+		L.Push(lua.LString(string(val)))
 		return 1
 	}
 	L.Push(lua.LNil)

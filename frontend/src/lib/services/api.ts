@@ -1,7 +1,8 @@
 import type {
 	SearchItem,
+	SearchResponse,
 	Chapter,
-	Document,
+	Document as LectorDocument,
 	Group,
 	Plugin,
 	PluginManifest,
@@ -15,6 +16,14 @@ const getBase = () => {
 	if (typeof window !== 'undefined') return window.location.origin;
 	return 'http://localhost:3000';
 };
+
+export interface ReadingStat {
+	id: number;
+	date: string;
+	read_seconds: number;
+	documents_read: number;
+	chapters_read: number;
+}
 
 export const api = {
 	async getPlugins(): Promise<string[]> {
@@ -66,25 +75,40 @@ export const api = {
 	async deleteGroup(id: number): Promise<void> {
 		await fetch(`${getBase()}/api/groups/${id}`, { method: 'DELETE' });
 	},
-	async getDocuments(archived = false): Promise<Document[]> {
+	async getDocuments(archived = false): Promise<LectorDocument[]> {
 		return fetch(`${getBase()}/api/documents?archived=${archived}`).then((r) => r.json());
 	},
-	async searchLibrary(query: string): Promise<Document[]> {
+	async searchLibrary(query: string): Promise<LectorDocument[]> {
 		return fetch(`${getBase()}/api/documents/search?q=${encodeURIComponent(query)}`).then((r) =>
 			r.json()
 		);
 	},
-	async getDocument(id: number): Promise<Document> {
+	async getDocument(id: number): Promise<LectorDocument> {
 		return fetch(`${getBase()}/api/documents/${id}`).then((r) => r.json());
 	},
-	async ensureDocument(url: string, source: string): Promise<Document> {
-		return fetch(`${getBase()}/api/documents/ensure`, {
+	async ensureDocument(url: string, source: string, force?: boolean): Promise<LectorDocument> {
+		const endpoint = force
+			? `${getBase()}/api/documents/ensure?force=true`
+			: `${getBase()}/api/documents/ensure`;
+		return fetch(endpoint, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ url, source })
 		}).then((r) => r.json());
 	},
-	async uploadBook(file: File): Promise<Document> {
+	async refreshDocument(id: number): Promise<LectorDocument> {
+		return fetch(`${getBase()}/api/documents/${id}/refresh`, {
+			method: 'POST'
+		}).then((r) => r.json());
+	},
+	async batchRefreshDocuments(ids: number[]): Promise<void> {
+		await fetch(`${getBase()}/api/documents/batch/refresh`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ ids })
+		});
+	},
+	async uploadBook(file: File): Promise<LectorDocument> {
 		const formData = new FormData();
 		formData.append('book', file);
 		return fetch(`${getBase()}/api/upload`, {
@@ -99,7 +123,7 @@ export const api = {
 			body: JSON.stringify({ url: targetUrl, source })
 		});
 	},
-	async updateMetadata(id: number, data: Partial<Document>): Promise<void> {
+	async updateMetadata(id: number, data: Partial<LectorDocument>): Promise<void> {
 		await fetch(`${getBase()}/api/documents/${id}/metadata`, {
 			method: 'PUT',
 			headers: { 'Content-Type': 'application/json' },
@@ -190,7 +214,7 @@ export const api = {
 			return r.json();
 		});
 	},
-	async search(source: string, query: string): Promise<SearchItem[]> {
+	async search(source: string, query: string): Promise<SearchResponse> {
 		return fetch(
 			`${getBase()}/api/search?q=${encodeURIComponent(query)}&plugin=${encodeURIComponent(source)}`
 		).then((r) => r.json());
@@ -201,7 +225,7 @@ export const api = {
 	async getDocumentLatest(plugin: string, page = 1): Promise<SearchItem[]> {
 		return fetch(`${getBase()}/api/plugins/${plugin}/latest?page=${page}`).then((r) => r.json());
 	},
-	async getHistory(): Promise<Document[]> {
+	async getHistory(): Promise<LectorDocument[]> {
 		return fetch(`${getBase()}/api/history`).then((r) => r.json());
 	},
 	async deleteHistory(id: number): Promise<void> {
@@ -269,5 +293,15 @@ export const api = {
 	getProxyImage(url: string): string {
 		if (!url || url.startsWith('blob:') || url.startsWith('/')) return url;
 		return `/api/proxy-image?url=${encodeURIComponent(url)}`;
+	},
+	async trackAnalytics(type: string, value: number) {
+		await fetch(`${getBase()}/api/analytics/track`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ type, value })
+		});
+	},
+	async getAnalytics(): Promise<ReadingStat[]> {
+		return fetch(`${getBase()}/api/analytics`).then((r) => r.json());
 	}
 };

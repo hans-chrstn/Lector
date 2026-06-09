@@ -26,9 +26,11 @@ func (s *LuaPlugin) fsReadFile(L *lua.LState) int {
 
 	path := L.CheckString(1)
 	sandboxDir, _ := filepath.Abs(filepath.Join("uploads", "plugins", name))
+	sandboxDir = filepath.Clean(sandboxDir)
 	fullPath, _ := filepath.Abs(filepath.Join(sandboxDir, path))
+	fullPath = filepath.Clean(fullPath)
 
-	if !strings.HasPrefix(fullPath, sandboxDir) {
+	if fullPath != sandboxDir && !strings.HasPrefix(fullPath, sandboxDir+string(filepath.Separator)) {
 		fmt.Printf("[Security] [%s] Blocked directory traversal attempt: %s\n", name, path)
 		L.Push(lua.LNil)
 		return 1
@@ -54,9 +56,11 @@ func (s *LuaPlugin) fsWriteFile(L *lua.LState) int {
 	path := L.CheckString(1)
 	content := L.CheckString(2)
 	sandboxDir, _ := filepath.Abs(filepath.Join("uploads", "plugins", name))
+	sandboxDir = filepath.Clean(sandboxDir)
 	fullPath, _ := filepath.Abs(filepath.Join(sandboxDir, path))
+	fullPath = filepath.Clean(fullPath)
 
-	if !strings.HasPrefix(fullPath, sandboxDir) {
+	if fullPath != sandboxDir && !strings.HasPrefix(fullPath, sandboxDir+string(filepath.Separator)) {
 		fmt.Printf("[Security] [%s] Blocked directory traversal attempt: %s\n", name, path)
 		L.Push(lua.LBool(false))
 		return 1

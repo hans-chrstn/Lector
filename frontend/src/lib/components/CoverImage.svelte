@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { ImageOff, Camera } from 'lucide-svelte';
+	import ImageOff from 'lucide-svelte/icons/image-off';
+	import Camera from 'lucide-svelte/icons/camera';
 	import { api } from '$lib/services/api';
 	import { clsx } from 'clsx';
 

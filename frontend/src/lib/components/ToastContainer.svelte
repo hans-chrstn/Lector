@@ -1,6 +1,9 @@
 <script lang="ts">
 	import { toast } from '$lib/services/toast.svelte';
-	import { CheckCircle2, AlertCircle, Info, X } from 'lucide-svelte';
+	import CheckCircle2 from 'lucide-svelte/icons/check-circle-2';
+	import AlertCircle from 'lucide-svelte/icons/alert-circle';
+	import Info from 'lucide-svelte/icons/info';
+	import X from 'lucide-svelte/icons/x';
 	import { flip } from 'svelte/animate';
 	import { fade, fly } from 'svelte/transition';
 	import { clsx } from 'clsx';

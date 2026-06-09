@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Menu, X } from 'lucide-svelte';
+	import Menu from 'lucide-svelte/icons/menu';
+	import X from 'lucide-svelte/icons/x';
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import Library from '$lib/views/Library.svelte';
 	import Search from '$lib/views/Search.svelte';
@@ -17,18 +18,19 @@
 		api,
 		type PluginManifest,
 		type Group,
-		type Document,
+		type Document as LectorDocument,
 		type SearchItem,
 		type Chapter
 	} from '$lib/services/api';
 	import { baseManifest } from '$lib/services/ui';
 	import { clsx } from 'clsx';
+	import { toast } from '$lib/services/toast.svelte';
 
 	let plugins = $state<PluginManifest[]>([]);
 	let sources = $state<string[]>([]);
 	let groups = $state<Group[]>([]);
-	let documents = $state<Document[]>([]);
-	let history = $state<Document[]>([]);
+	let documents = $state<LectorDocument[]>([]);
+	let history = $state<LectorDocument[]>([]);
 	let view = $state('library');
 	let originNav = $state({ view: 'library', plugin: 'system', tabId: 'sys:library' });
 	let currentPlugin = $state('system');
@@ -46,7 +48,7 @@
 	let searchItems = $state<SearchItem[]>([]);
 	let popularResults = $state<SearchItem[]>([]);
 	let latestResults = $state<SearchItem[]>([]);
-	let activeDocument = $state<Document | null>(null);
+	let activeDocument = $state<LectorDocument | null>(null);
 	let activeChapter = $state<Chapter | null>(null);
 
 	$effect(() => {
@@ -144,6 +146,17 @@
 		await refreshDocuments();
 	}
 
+	async function handleBatchRefresh(ids: number[]) {
+		try {
+			toast.success(`Refreshing ${ids.length} documents...`);
+			await api.batchRefreshDocuments(ids);
+			await refreshDocuments();
+			toast.success('Documents refreshed successfully');
+		} catch {
+			toast.error('Failed to refresh documents');
+		}
+	}
+
 	async function handleNavigate(targetView: string, plugin?: string, tabId?: string) {
 		sidebarOpen = false;
 
@@ -189,7 +202,13 @@
 	async function handleSearch(q: string, source: string) {
 		loading = true;
 		try {
-			searchItems = await api.search(source, q);
+			const res = await api.search(source, q);
+			searchItems = res.results || [];
+			if (res.errors && res.errors.length > 0) {
+				res.errors.forEach((err: string) => {
+					toast.error(err);
+				});
+			}
 		} finally {
 			loading = false;
 		}
@@ -198,7 +217,7 @@
 	async function handleSelectDocument(url: string, source: string) {
 		loading = true;
 		try {
-			activeDocument = await api.ensureDocument(url, source);
+			activeDocument = await api.ensureDocument(url, source, true);
 			if (view !== 'detail' && view !== 'reader') {
 				originNav = { view, plugin: currentPlugin, tabId: currentTabId };
 			}
@@ -294,6 +313,7 @@
 					onBatchMove={handleBatchMove}
 					onBatchArchive={handleBatchArchive}
 					onBatchMarkRead={handleBatchMarkRead}
+					onBatchRefresh={handleBatchRefresh}
 				/>
 			{:else if view === 'history'}
 				<History
@@ -320,7 +340,7 @@
 				/>
 			{:else if view === 'search'}
 				<Search
-					{sources}
+					{plugins}
 					results={searchItems}
 					{loading}
 					onSearch={handleSearch}
@@ -362,7 +382,7 @@
 					pluginManifests={plugins}
 				/>
 			{:else if view === 'settings'}
-				<Settings {sources} />
+				<Settings pluginManifests={plugins} />
 			{:else if view === 'reader' && activeChapter && activeDocument}
 				<Reader
 					chapter={activeChapter}

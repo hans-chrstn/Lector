@@ -1,14 +1,12 @@
 <script lang="ts">
-	import {
-		X,
-		Menu,
-		Library,
-		BookmarkPlus,
-		Layout,
-		BookText,
-		Volume2,
-		VolumeX
-	} from 'lucide-svelte';
+	import X from 'lucide-svelte/icons/x';
+	import Menu from 'lucide-svelte/icons/menu';
+	import Library from 'lucide-svelte/icons/library';
+	import BookmarkPlus from 'lucide-svelte/icons/bookmark-plus';
+	import Layout from 'lucide-svelte/icons/layout';
+	import BookText from 'lucide-svelte/icons/book-text';
+	import Volume2 from 'lucide-svelte/icons/volume-2';
+	import VolumeX from 'lucide-svelte/icons/volume-x';
 	import { clsx } from 'clsx';
 
 	interface Props {

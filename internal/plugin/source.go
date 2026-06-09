@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/user/lector/internal/core/sanitizer"
 	"github.com/user/lector/internal/models"
 	lua "github.com/yuin/gopher-lua"
 )
@@ -24,6 +25,9 @@ func (s *LuaPlugin) callSearchFunc(name string, param lua.LValue) ([]models.Sear
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	s.L.SetContext(ctx)
+
+	stopMonitor := MonitorMemory(ctx, cancel, 50*1024*1024)
+	defer stopMonitor()
 
 	fn := s.L.GetGlobal(name)
 	if fn.Type() != lua.LTFunction {
@@ -78,6 +82,9 @@ func (s *LuaPlugin) GetDocument(u string) (models.Document, error) {
 	defer cancel()
 	s.L.SetContext(ctx)
 
+	stopMonitor := MonitorMemory(ctx, cancel, 50*1024*1024)
+	defer stopMonitor()
+
 	if err := s.L.CallByParam(lua.P{Fn: s.L.GetGlobal("get_document"), NRet: 1, Protect: true}, lua.LString(u)); err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			pName := strings.TrimSuffix(filepath.Base(s.Path), ".lua")
@@ -104,7 +111,11 @@ func (s *LuaPlugin) GetDocument(u string) (models.Document, error) {
 			Synopsis: luaStr("synopsis"),
 			Genres:   luaStr("genres"),
 			Status:   luaStr("status"),
+			Type:     luaStr("type"),
 			Chapters: []models.Chapter{},
+		}
+		if doc.Type == "" {
+			doc.Type = "text"
 		}
 		if doc.Title == "" {
 			doc.Title = "UNKNOWN"
@@ -141,6 +152,9 @@ func (s *LuaPlugin) GetChapter(u string) (models.Chapter, error) {
 	defer cancel()
 	s.L.SetContext(ctx)
 
+	stopMonitor := MonitorMemory(ctx, cancel, 50*1024*1024)
+	defer stopMonitor()
+
 	if err := s.L.CallByParam(lua.P{Fn: s.L.GetGlobal("get_chapter"), NRet: 1, Protect: true}, lua.LString(u)); err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			pName := strings.TrimSuffix(filepath.Base(s.Path), ".lua")
@@ -151,17 +165,26 @@ func (s *LuaPlugin) GetChapter(u string) (models.Chapter, error) {
 	ret := s.L.Get(-1)
 	s.L.Pop(1)
 	if tbl, ok := ret.(*lua.LTable); ok {
-		content := tbl.RawGetString("content").String()
-		title := tbl.RawGetString("title").String()
+		luaStr := func(key string) string {
+			v := tbl.RawGetString(key)
+			if v.Type() == lua.LTNil {
+				return ""
+			}
+			return v.String()
+		}
+		content := luaStr("content")
+		title := luaStr("title")
+		metadata := luaStr("metadata")
 		return models.Chapter{
-			Title:   title,
-			Content: CleanHTML(content, title),
-			URL:     u,
+			Title:    title,
+			Content:  sanitizer.CleanHTML(content, title),
+			Metadata: metadata,
+			URL:      u,
 		}, nil
 	}
 	return models.Chapter{}, fmt.Errorf("invalid return")
 }
 
 func (s *LuaPlugin) CleanHTML(html string, chapterTitle string) string {
-	return CleanHTML(html, chapterTitle)
+	return sanitizer.CleanHTML(html, chapterTitle)
 }

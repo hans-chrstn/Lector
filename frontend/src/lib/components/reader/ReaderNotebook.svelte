@@ -1,5 +1,7 @@
 <script lang="ts">
-	import { X, Trash2, Send } from 'lucide-svelte';
+	import X from 'lucide-svelte/icons/x';
+	import Trash2 from 'lucide-svelte/icons/trash-2';
+	import Send from 'lucide-svelte/icons/send';
 
 	interface Note {
 		id: number;

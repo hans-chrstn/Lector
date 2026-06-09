@@ -8,6 +8,8 @@ require (
 	github.com/gofiber/fiber/v2 v2.52.13
 	github.com/google/uuid v1.6.0
 	github.com/jung-kurt/gofpdf/v2 v2.17.3
+	github.com/microcosm-cc/bluemonday v1.0.27
+	github.com/nwaples/rardecode/v2 v2.2.3
 	github.com/yuin/gopher-lua v1.1.2
 	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.31.1
@@ -27,8 +29,6 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/mattn/go-sqlite3 v1.14.22 // indirect
-	github.com/microcosm-cc/bluemonday v1.0.27 // indirect
-	github.com/nwaples/rardecode/v2 v2.2.3 // indirect
 	github.com/philhofer/fwd v1.1.3-0.20240916144458-20a13a1f6b7c // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/tinylib/msgp v1.2.5 // indirect
@@ -36,7 +36,7 @@ require (
 	github.com/valyala/fasthttp v1.51.0 // indirect
 	github.com/valyala/tcplisten v1.0.0 // indirect
 	github.com/vincent-petithory/dataurl v1.0.0 // indirect
-	golang.org/x/net v0.52.0 // indirect
-	golang.org/x/sys v0.42.0 // indirect
-	golang.org/x/text v0.35.0 // indirect
+	golang.org/x/net v0.55.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
+	golang.org/x/text v0.37.0 // indirect
 )

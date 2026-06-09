@@ -30,11 +30,11 @@ func (h *API) ExportDocument(c *fiber.Ctx) error {
 	docID, _ := strconv.Atoi(id)
 
 	var doc models.Document
-	if err := db.DB.Preload("Chapters", func(db *gorm.DB) *gorm.DB {
+	if err := db.DB.WithContext(c.UserContext()).Preload("Chapters", func(db *gorm.DB) *gorm.DB {
 		return db.Order("CAST(\"order\" AS INTEGER) ASC")
 	}).First(&doc, uint(docID)).Error; err != nil {
 		fmt.Printf("[Export] Document %d not found: %v\n", docID, err)
-		return c.Status(404).SendString("Document not found")
+		return c.Status(404).JSON(fiber.Map{"error": "Document not found"})
 	}
 
 	ext := "epub"
@@ -57,7 +57,7 @@ func (h *API) ExportDocument(c *fiber.Ctx) error {
 
 	if binderErr != nil {
 		fmt.Printf("[Export] Binder error for %s: %v\n", doc.Title, binderErr)
-		return c.Status(500).SendString(fmt.Sprintf("Failed to bind %s: %v", format, binderErr))
+		return c.Status(500).JSON(fiber.Map{"error": fmt.Sprintf("Failed to bind %s: %v", format, binderErr)})
 	}
 
 	go func() {

@@ -15,6 +15,39 @@ import (
 
 var DB *gorm.DB
 
+type SchemaVersion struct {
+	Version   int       `gorm:"primaryKey" json:"version"`
+	AppliedAt time.Time `json:"applied_at"`
+}
+
+func runMigrations(db *gorm.DB) {
+	db.AutoMigrate(&SchemaVersion{})
+
+	var currentVersion int
+	db.Model(&SchemaVersion{}).Select("COALESCE(MAX(version), 0)").Scan(&currentVersion)
+
+	if currentVersion < 1 {
+		db.AutoMigrate(
+			&models.Document{},
+			&models.Chapter{},
+			&models.ReadingProgress{},
+			&models.Group{},
+			&models.CacheItem{},
+			&models.Bookmark{},
+			&models.Note{},
+			&models.Plugin{},
+			&models.LibraryPath{},
+		)
+		setupFTS(db)
+		db.Create(&SchemaVersion{Version: 1, AppliedAt: time.Now()})
+	}
+
+	if currentVersion < 2 {
+		db.AutoMigrate(&models.ReadingStat{})
+		db.Create(&SchemaVersion{Version: 2, AppliedAt: time.Now()})
+	}
+}
+
 func InitDB(path string) {
 	var err error
 
@@ -37,7 +70,16 @@ func InitDB(path string) {
 		},
 	)
 
-	DB, err = gorm.Open(sqlite.Open(path), &gorm.Config{
+	dsn := path
+	if !strings.Contains(path, ":memory:") {
+		if !strings.Contains(path, "?") {
+			dsn = path + "?_journal_mode=WAL&_busy_timeout=5000"
+		} else {
+			dsn = path + "&_journal_mode=WAL&_busy_timeout=5000"
+		}
+	}
+
+	DB, err = gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		Logger: newLogger,
 	})
 	if err != nil {
@@ -53,9 +95,7 @@ func InitDB(path string) {
 		os.Chmod(path, 0600)
 	}
 
-	DB.AutoMigrate(&models.Document{}, &models.Chapter{}, &models.ReadingProgress{}, &models.Group{}, &models.CacheItem{}, &models.Bookmark{}, &models.Note{}, &models.Plugin{}, &models.LibraryPath{})
-
-	setupFTS(DB)
+	runMigrations(DB)
 
 	log.Println("Database initialized in Silent Mode")
 }

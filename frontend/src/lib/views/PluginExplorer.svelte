@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { Loader2, Info } from 'lucide-svelte';
+	import Loader2 from 'lucide-svelte/icons/loader-2';
+	import Info from 'lucide-svelte/icons/info';
 	import DocumentGridItem from '../components/DocumentGridItem.svelte';
 	import BasePage from '../components/base/BasePage.svelte';
 	import { api, type SearchItem } from '$lib/services/api';

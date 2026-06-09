@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Loader2 } from 'lucide-svelte';
+	import Loader2 from 'lucide-svelte/icons/loader-2';
 	import Modal from '../../components/Modal.svelte';
 	import { api, type SearchItem } from '$lib/services/api';
 
@@ -27,7 +27,8 @@
 		if (!migrateQuery.trim()) return;
 		isMigrating = true;
 		try {
-			migrateResults = await api.search(migrateSource, migrateQuery);
+			const res = await api.search(migrateSource, migrateQuery);
+			migrateResults = res.results || [];
 		} finally {
 			isMigrating = false;
 		}
