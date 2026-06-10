@@ -52,7 +52,7 @@
 	onMount(() => {
 		window.addEventListener('message', handleMessage);
 
-		// Ping IFrames that we are ready to receive their initial data
+
 		const iframes = document.querySelectorAll('iframe');
 		iframes.forEach((iframe) => {
 			if (iframe.contentWindow) {
@@ -78,7 +78,7 @@
 		}
 	});
 
-	// Re-ping iframes when schema updates and renders them
+
 	$effect(() => {
 		if (schema && !loading) {
 			setTimeout(() => {
@@ -88,7 +88,7 @@
 						iframe.contentWindow.postMessage({ type: 'READY' }, '*');
 					}
 				});
-			}, 200); // Give DOM time to render iframe tags
+			}, 200);
 		}
 	});
 

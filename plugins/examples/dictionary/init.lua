@@ -1,6 +1,7 @@
 app.set_id("dictionary")
 local BASE_URL = "https://api.dictionaryapi.dev/api/v2/entries/en/"
 
+app.register_manifest({type="utility"})
 app.enable_capability("network")
 app.enable_capability("interaction")
 app.enable_capability("ui")

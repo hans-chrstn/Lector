@@ -31,9 +31,8 @@ func (h *API) GetChapterByID(c *fiber.Ctx) error {
 		}
 	}
 
-	// Sanitize chapter content to prevent XSS before sending to frontend
 	p := bluemonday.UGCPolicy()
-	p.AllowAttrs("style").OnElements("span", "div", "p") // Allow basic styling
+	p.AllowAttrs("style").OnElements("span", "div", "p")
 	ch.Content = p.Sanitize(ch.Content)
 
 	return c.JSON(ch)

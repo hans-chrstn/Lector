@@ -16,6 +16,7 @@ import (
 func TestLuaEnvironment(t *testing.T) {
 	db.InitDB(":memory:")
 	luaCode := `
+		app.register_manifest({type="utility"})
 		app.enable_capability("ui")
 		app.add_section("test", "Test")
 		assert(type(app) == "table", "app global should be a table")
@@ -40,6 +41,7 @@ func TestLuaSandboxSecurity(t *testing.T) {
 	db.InitDB(":memory:")
 	t.Run("Dangerous Modules Restricted", func(t *testing.T) {
 		luaCode := `
+			app.register_manifest({type="utility"})
 			app.enable_capability("ui")
 			app.add_section("test", "Test")
 			if os and os.execute then
@@ -75,6 +77,7 @@ func TestLuaFSSandboxSecurity(t *testing.T) {
 	defer os.RemoveAll("uploads")
 
 	luaCode := `
+		app.register_manifest({type="utility"})
 		app.enable_capability("storage")
 		app.enable_capability("ui")
 		app.add_section("test", "Test")
@@ -103,6 +106,7 @@ func TestLuaNetworkSandboxSecurity(t *testing.T) {
 	db.InitDB(":memory:")
 	t.Run("SSRF Dialer Protection", func(t *testing.T) {
 		luaCode := `
+			app.register_manifest({type="utility"})
 			app.enable_capability("network")
 			app.enable_capability("ui")
 			app.add_section("test", "Test")
@@ -123,6 +127,7 @@ func TestLuaNetworkSandboxSecurity(t *testing.T) {
 
 	t.Run("Unauthorized Domain Protection", func(t *testing.T) {
 		luaCode := `
+			app.register_manifest({type="utility"})
 			app.enable_capability("network")
 			app.enable_capability("ui")
 			app.add_section("test", "Test")
@@ -158,6 +163,7 @@ func TestLuaNetworkSandboxSecurity(t *testing.T) {
 		defer ts.Close()
 
 		luaCode := `
+			app.register_manifest({type="utility"})
 			app.enable_capability("network")
 			app.enable_capability("ui")
 			app.add_section("test", "Test")

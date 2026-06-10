@@ -11,6 +11,7 @@ import (
 
 func (s *LuaPlugin) registerAppFunctions() {
 	app := s.L.NewTable()
+	s.L.SetField(app, "register_manifest", s.L.NewFunction(s.registerManifest))
 	s.L.SetField(app, "enable_capability", s.L.NewFunction(s.enableCapability))
 	s.L.SetField(app, "add_tab", s.L.NewFunction(s.addTab))
 	s.L.SetField(app, "add_section", s.L.NewFunction(s.addSection))
@@ -109,6 +110,37 @@ func (s *LuaPlugin) netSetProfile(L *lua.LState) int {
 	s.Mu.Lock()
 	s.NetworkProfileName = profile
 	s.Mu.Unlock()
+	return 0
+}
+
+func (s *LuaPlugin) registerManifest(L *lua.LState) int {
+	manifest := L.CheckTable(1)
+	s.ManifestMu.Lock()
+	defer s.ManifestMu.Unlock()
+
+	typ := manifest.RawGetString("type")
+	if typ.Type() == lua.LTString {
+		s.Type = typ.String()
+	}
+
+	caps := manifest.RawGetString("capabilities")
+	if caps.Type() == lua.LTTable {
+		caps.(*lua.LTable).ForEach(func(k, v lua.LValue) {
+			if v.Type() == lua.LTString {
+				capStr := v.String()
+				exists := false
+				for _, c := range s.Capabilities {
+					if c == capStr {
+						exists = true
+						break
+					}
+				}
+				if !exists {
+					s.Capabilities = append(s.Capabilities, capStr)
+				}
+			}
+		})
+	}
 	return 0
 }
 
@@ -280,7 +312,17 @@ func (s *LuaPlugin) addTab(L *lua.LState) int {
 	sectionID := L.OptString(4, "")
 	component := L.OptString(5, "")
 	s.ManifestMu.Lock()
-	s.Tabs = append(s.Tabs, Tab{ID: id, Label: label, Icon: icon, SectionID: sectionID, Component: component})
+	exists := false
+	for i, t := range s.Tabs {
+		if t.ID == id {
+			s.Tabs[i] = Tab{ID: id, Label: label, Icon: icon, SectionID: sectionID, Component: component}
+			exists = true
+			break
+		}
+	}
+	if !exists {
+		s.Tabs = append(s.Tabs, Tab{ID: id, Label: label, Icon: icon, SectionID: sectionID, Component: component})
+	}
 	s.ManifestMu.Unlock()
 	return 0
 }
@@ -294,7 +336,17 @@ func (s *LuaPlugin) addSection(L *lua.LState) int {
 	id := L.CheckString(1)
 	label := L.CheckString(2)
 	s.ManifestMu.Lock()
-	s.Sections = append(s.Sections, Section{ID: id, Label: label})
+	exists := false
+	for i, sect := range s.Sections {
+		if sect.ID == id {
+			s.Sections[i] = Section{ID: id, Label: label}
+			exists = true
+			break
+		}
+	}
+	if !exists {
+		s.Sections = append(s.Sections, Section{ID: id, Label: label})
+	}
 	s.ManifestMu.Unlock()
 	return 0
 }
@@ -333,9 +385,6 @@ func (s *LuaPlugin) appSpawn(L *lua.LState) int {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		newL.L.SetContext(ctx)
-
-		stopMonitor := MonitorMemory(ctx, cancel, 50*1024*1024)
-		defer stopMonitor()
 
 		fn := newL.L.GetGlobal(funcName)
 		if fn.Type() != lua.LTFunction {

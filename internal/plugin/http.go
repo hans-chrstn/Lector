@@ -3,6 +3,7 @@ package plugin
 import (
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -87,7 +88,7 @@ func (m *CadenceManager) Wait(pluginName string, minMs, maxMs int) {
 	m.mu.Unlock()
 }
 
-func (m *ClientManager) GetClient(pluginName string, profile NetworkProfile) *http.Client {
+func (m *ClientManager) GetClient(pluginName string, profile NetworkProfile, allowLocal bool) *http.Client {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -95,9 +96,14 @@ func (m *ClientManager) GetClient(pluginName string, profile NetworkProfile) *ht
 		return client
 	}
 
+	var transport http.RoundTripper = httpclient.GlobalTransport
+	if allowLocal {
+		transport = httpclient.RelaxedClient.Transport
+	}
+
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{
-		Transport: httpclient.GlobalTransport,
+		Transport: transport,
 		Jar:       jar,
 		Timeout:   30 * time.Second,
 	}
@@ -106,8 +112,18 @@ func (m *ClientManager) GetClient(pluginName string, profile NetworkProfile) *ht
 	return client
 }
 
+func checkPermission(host, permission string) bool {
+	if permission == "*" {
+		return true
+	}
+	if host == permission {
+		return true
+	}
+	return strings.HasSuffix(host, "."+permission)
+}
+
 func (s *LuaPlugin) Fetch(method, u, postData, referer string, isAjax bool, customHeaders map[string]string) string {
-	name := strings.TrimSuffix(filepath.Base(s.Path), ".lua")
+	name := s.Name
 	profileName := s.NetworkProfileName
 	if profileName == "" {
 		profileName = "standard"
@@ -116,8 +132,6 @@ func (s *LuaPlugin) Fetch(method, u, postData, referer string, isAjax bool, cust
 	if profile.Name == "" {
 		profile = Profiles["standard"]
 	}
-
-	GlobalCadenceManager.Wait(name, 200, 600)
 
 	if !s.HasCapability("network") {
 		fmt.Printf("[Security] [%s] Blocked unauthorized network request (Capability 'network' not enabled)\n", name)
@@ -131,11 +145,16 @@ func (s *LuaPlugin) Fetch(method, u, postData, referer string, isAjax bool, cust
 	}
 
 	allowed := false
+	hostOnly, _, err := net.SplitHostPort(parsed.Host)
+	if err != nil {
+		hostOnly = parsed.Host
+	}
+
 	if len(s.Permissions) == 0 {
 		allowed = true
 	} else {
 		for _, domain := range s.Permissions {
-			if domain == "*" || strings.HasSuffix(parsed.Host, domain) {
+			if checkPermission(parsed.Host, domain) || checkPermission(hostOnly, domain) {
 				allowed = true
 				break
 			}
@@ -147,7 +166,9 @@ func (s *LuaPlugin) Fetch(method, u, postData, referer string, isAjax bool, cust
 		return "ERROR: Unauthorized domain"
 	}
 
-	client := GlobalClientManager.GetClient(name, profile)
+	GlobalCadenceManager.Wait(name, 200, 600)
+
+	client := GlobalClientManager.GetClient(name, profile, s.HasCapability("local_network"))
 
 	var body io.Reader
 	if method == "POST" {
@@ -199,7 +220,7 @@ func (s *LuaPlugin) Fetch(method, u, postData, referer string, isAjax bool, cust
 }
 
 func (s *LuaPlugin) Download(u, destPath, referer string, customHeaders map[string]string) bool {
-	name := strings.TrimSuffix(filepath.Base(s.Path), ".lua")
+	name := s.Name
 	profileName := s.NetworkProfileName
 	if profileName == "" {
 		profileName = "standard"
@@ -208,8 +229,6 @@ func (s *LuaPlugin) Download(u, destPath, referer string, customHeaders map[stri
 	if profile.Name == "" {
 		profile = Profiles["standard"]
 	}
-
-	GlobalCadenceManager.Wait(name, 200, 600)
 
 	if !s.HasCapability("network") {
 		return false
@@ -221,22 +240,29 @@ func (s *LuaPlugin) Download(u, destPath, referer string, customHeaders map[stri
 	}
 
 	allowed := false
+	hostOnly, _, splitErr := net.SplitHostPort(parsed.Host)
+	if splitErr != nil {
+		hostOnly = parsed.Host
+	}
+
 	if len(s.Permissions) == 0 {
 		allowed = true
 	} else {
 		for _, domain := range s.Permissions {
-			if domain == "*" || strings.HasSuffix(parsed.Host, domain) {
+			if checkPermission(parsed.Host, domain) || checkPermission(hostOnly, domain) {
 				allowed = true
 				break
 			}
 		}
 	}
 
-	if !allowed {
-		return false
-	}
+if !allowed {
+	return false
+}
 
-	client := GlobalClientManager.GetClient(name, profile)
+	GlobalCadenceManager.Wait(name, 500, 1500)
+
+	client := GlobalClientManager.GetClient(name, profile, s.HasCapability("local_network"))
 
 	req, err := http.NewRequest("GET", u, nil)
 	if err != nil {

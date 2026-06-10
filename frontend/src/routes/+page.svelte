@@ -222,6 +222,8 @@
 				originNav = { view, plugin: currentPlugin, tabId: currentTabId };
 			}
 			view = 'detail';
+		} catch (err: any) {
+			toast.error(err.message || 'Failed to load document');
 		} finally {
 			loading = false;
 		}

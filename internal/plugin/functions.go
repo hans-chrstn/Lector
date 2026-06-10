@@ -72,13 +72,19 @@ func (s *LuaPlugin) jsonDecode(L *lua.LState) int {
 		L.Push(lua.LNil)
 		return 1
 	}
-	L.Push(luaValueToInterfaceTable(L, data))
+	converter := &JSONConverter{MaxDepth: 50}
+	L.Push(converter.ToLua(L, data))
 	return 1
 }
 
 func (s *LuaPlugin) jsonEncode(L *lua.LState) int {
 	val := L.CheckAny(1)
-	data := luaValueToInterfaceGo(val)
+	converter := &JSONConverter{MaxDepth: 50}
+	data := converter.ToGo(val)
+	if data == nil {
+		L.Push(lua.LString(""))
+		return 1
+	}
 	b, err := json.Marshal(data)
 	if err != nil {
 		L.Push(lua.LString(""))
@@ -88,7 +94,18 @@ func (s *LuaPlugin) jsonEncode(L *lua.LState) int {
 	return 1
 }
 
-func luaValueToInterfaceTable(L *lua.LState, val interface{}) lua.LValue {
+type JSONConverter struct {
+	MaxDepth     int
+	currentDepth int
+}
+
+func (c *JSONConverter) ToLua(L *lua.LState, val interface{}) lua.LValue {
+	if c.currentDepth > c.MaxDepth {
+		return lua.LNil
+	}
+	c.currentDepth++
+	defer func() { c.currentDepth -= 1 }()
+
 	switch v := val.(type) {
 	case string:
 		return lua.LString(v)
@@ -99,13 +116,13 @@ func luaValueToInterfaceTable(L *lua.LState, val interface{}) lua.LValue {
 	case []interface{}:
 		tbl := L.NewTable()
 		for _, item := range v {
-			tbl.Append(luaValueToInterfaceTable(L, item))
+			tbl.Append(c.ToLua(L, item))
 		}
 		return tbl
 	case map[string]interface{}:
 		tbl := L.NewTable()
 		for k, item := range v {
-			tbl.RawSetString(k, luaValueToInterfaceTable(L, item))
+			tbl.RawSetString(k, c.ToLua(L, item))
 		}
 		return tbl
 	default:
@@ -113,7 +130,13 @@ func luaValueToInterfaceTable(L *lua.LState, val interface{}) lua.LValue {
 	}
 }
 
-func luaValueToInterfaceGo(v lua.LValue) interface{} {
+func (c *JSONConverter) ToGo(v lua.LValue) interface{} {
+	if c.currentDepth > c.MaxDepth {
+		return nil
+	}
+	c.currentDepth++
+	defer func() { c.currentDepth -= 1 }()
+
 	switch v.Type() {
 	case lua.LTString:
 		return v.String()
@@ -126,13 +149,13 @@ func luaValueToInterfaceGo(v lua.LValue) interface{} {
 		if tbl.MaxN() > 0 {
 			arr := []interface{}{}
 			tbl.ForEach(func(k, v lua.LValue) {
-				arr = append(arr, luaValueToInterfaceGo(v))
+				arr = append(arr, c.ToGo(v))
 			})
 			return arr
 		}
 		res := make(map[string]interface{})
-		tbl.ForEach(func(k, v lua.LValue) {
-			res[k.String()] = luaValueToInterfaceGo(v)
+		tbl.ForEach(func(k, val lua.LValue) {
+			res[k.String()] = c.ToGo(val)
 		})
 		return res
 	default:

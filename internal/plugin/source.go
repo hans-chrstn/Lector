@@ -12,7 +12,7 @@ import (
 	lua "github.com/yuin/gopher-lua"
 )
 
-func (s *LuaPlugin) callSearchFunc(name string, param lua.LValue) ([]models.SearchItem, error) {
+func (s *LuaPlugin) callSearchFunc(name string, params ...lua.LValue) ([]models.SearchItem, error) {
 	pName := strings.TrimSuffix(filepath.Base(s.Path), ".lua")
 	if !s.HasCapability("source") {
 		fmt.Printf("[Security] [%s] Blocked unauthorized source call: %s (Capability 'source' not enabled)\n", pName, name)
@@ -26,14 +26,11 @@ func (s *LuaPlugin) callSearchFunc(name string, param lua.LValue) ([]models.Sear
 	defer cancel()
 	s.L.SetContext(ctx)
 
-	stopMonitor := MonitorMemory(ctx, cancel, 50*1024*1024)
-	defer stopMonitor()
-
 	fn := s.L.GetGlobal(name)
 	if fn.Type() != lua.LTFunction {
 		return []models.SearchItem{}, nil
 	}
-	if err := s.L.CallByParam(lua.P{Fn: fn, NRet: 1, Protect: true}, param); err != nil {
+	if err := s.L.CallByParam(lua.P{Fn: fn, NRet: 1, Protect: true}, params...); err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			pName := strings.TrimSuffix(filepath.Base(s.Path), ".lua")
 			fmt.Printf("[Security] [%s] Execution timed out in %s\n", pName, name)
@@ -61,6 +58,10 @@ func (s *LuaPlugin) callSearchFunc(name string, param lua.LValue) ([]models.Sear
 func (s *LuaPlugin) Search(q string) ([]models.SearchItem, error) {
 	return s.callSearchFunc("search", lua.LString(q))
 }
+
+func (s *LuaPlugin) GetDirectory(id string, p int) ([]models.SearchItem, error) {
+	return s.callSearchFunc("get_directory", lua.LString(id), lua.LNumber(p))
+}
 func (s *LuaPlugin) GetPopular(p int) ([]models.SearchItem, error) {
 	return s.callSearchFunc("get_popular", lua.LNumber(p))
 }
@@ -81,9 +82,6 @@ func (s *LuaPlugin) GetDocument(u string) (models.Document, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	s.L.SetContext(ctx)
-
-	stopMonitor := MonitorMemory(ctx, cancel, 50*1024*1024)
-	defer stopMonitor()
 
 	if err := s.L.CallByParam(lua.P{Fn: s.L.GetGlobal("get_document"), NRet: 1, Protect: true}, lua.LString(u)); err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
@@ -151,9 +149,6 @@ func (s *LuaPlugin) GetChapter(u string) (models.Chapter, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	s.L.SetContext(ctx)
-
-	stopMonitor := MonitorMemory(ctx, cancel, 50*1024*1024)
-	defer stopMonitor()
 
 	if err := s.L.CallByParam(lua.P{Fn: s.L.GetGlobal("get_chapter"), NRet: 1, Protect: true}, lua.LString(u)); err != nil {
 		if ctx.Err() == context.DeadlineExceeded {

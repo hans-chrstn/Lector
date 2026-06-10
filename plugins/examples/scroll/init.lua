@@ -1,4 +1,5 @@
 app.set_id("scroll")
+app.register_manifest({type="utility"})
 app.enable_capability("ui")
 
 app.ui.set_override("reader", {

@@ -1,6 +1,9 @@
 package api
 
 import (
+	"net/url"
+	"strings"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/user/lector/internal/db"
 	"github.com/user/lector/internal/models"
@@ -35,6 +38,7 @@ func RegisterRoutes(app *fiber.App, engine *plugin.PluginEngine) {
 	api.Delete("/plugins/:name", h.DeletePlugin)
 	api.Post("/plugins/:name/rpc/:method", h.PluginRPC)
 	api.Get("/plugins/:name/assets/*", h.ServePluginAsset)
+	api.Get("/plugins/:name/directory/:id", h.PluginDirectory)
 
 	api.Get("/search", h.Search)
 	api.Get("/discovery/search", h.Search)
@@ -93,4 +97,28 @@ func RegisterRoutes(app *fiber.App, engine *plugin.PluginEngine) {
 
 	api.Get("/opds", h.GetOPDSRoot)
 	api.Get("/opds/all", h.GetOPDSAll)
+}
+
+func (h *API) IsLocalNetworkAuthorized(targetURL string) bool {
+	parsed, err := url.Parse(targetURL)
+	if err != nil {
+		return false
+	}
+	host := parsed.Hostname()
+	if h.Engine == nil {
+		return false
+	}
+	for _, p := range h.Engine.Plugins {
+		if p.HasCapability("local_network") {
+			for _, perm := range p.Permissions {
+				if perm == "*" {
+					return true
+				}
+				if host == perm || strings.HasSuffix(host, "."+perm) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }

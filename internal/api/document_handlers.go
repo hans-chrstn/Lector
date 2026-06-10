@@ -2,97 +2,24 @@ package api
 
 import (
 	"bufio"
-	"context"
-	"crypto/tls"
 	"encoding/base64"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/user/lector/internal/core/httpclient"
 	"github.com/user/lector/internal/db"
 	"github.com/user/lector/internal/models"
 	"github.com/user/lector/internal/services"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
-
-var (
-	GlobalTransport = &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			host, _, err := net.SplitHostPort(addr)
-			if err != nil {
-				host = addr
-			}
-
-			ips, err := net.DefaultResolver.LookupIP(ctx, "ip", host)
-			if err != nil {
-				return nil, err
-			}
-
-			for _, ip := range ips {
-				if isPrivateIP(ip) {
-					return nil, fmt.Errorf("security: access to private IP %s is blocked", ip.String())
-				}
-			}
-
-			dialer := &net.Dialer{
-				Timeout:   15 * time.Second,
-				KeepAlive: 30 * time.Second,
-			}
-			return dialer.DialContext(ctx, network, addr)
-		},
-		MaxIdleConns:          100,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   15 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-		TLSClientConfig: &tls.Config{
-			MinVersion: tls.VersionTLS12,
-		},
-	}
-	InternalClient *http.Client
-	RelaxedClient  *http.Client
-)
-
-func init() {
-	InternalClient = &http.Client{
-		Transport: GlobalTransport,
-		Timeout:   30 * time.Second,
-	}
-	RelaxedClient = &http.Client{
-		Transport: &http.Transport{
-			Proxy: http.ProxyFromEnvironment,
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-				MinVersion:         tls.VersionTLS10,
-			},
-			ForceAttemptHTTP2: false,
-		},
-		Timeout: 30 * time.Second,
-	}
-}
-
-func isPrivateIP(ip net.IP) bool {
-	if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
-		return true
-	}
-	if ip4 := ip.To4(); ip4 != nil {
-		if ip4[0] == 10 ||
-			(ip4[0] == 172 && ip4[1] >= 16 && ip4[1] <= 31) ||
-			(ip4[0] == 192 && ip4[1] == 168) {
-			return true
-		}
-	}
-	return false
-}
 
 func (h *API) GetDocuments(c *fiber.Ctx) error {
 	showArchived := c.Query("archived") == "true"
@@ -466,29 +393,32 @@ func (h *API) handleProxy(c *fiber.Ctx, u string, ref string) error {
 		return client.Do(req)
 	}
 
-	resp, err := fetch(u, InternalClient)
+	client := httpclient.InternalClient
+	if h.IsLocalNetworkAuthorized(u) {
+		client = httpclient.RelaxedClient
+	}
+
+	resp, err := fetch(u, client)
 
 	if err != nil && (strings.Contains(err.Error(), "handshake") || strings.Contains(err.Error(), "wrong version number") || strings.Contains(err.Error(), "connection reset") || strings.Contains(err.Error(), "record length")) {
 		fmt.Printf("[ProxyStream] Primary TLS failed for %s, trying Relaxed Client\n", u)
-		resp, err = fetch(u, RelaxedClient)
+		resp, err = fetch(u, httpclient.RelaxedClient)
 	}
 
 	if err != nil && parsed.Scheme == "https" {
 		fmt.Printf("[ProxyStream] TLS failed for %s, falling back to HTTP\n", u)
 		httpURL := "http://" + parsed.Host + parsed.RequestURI()
-		resp, err = fetch(httpURL, InternalClient)
+		resp, err = fetch(httpURL, client)
 	}
 
 	if err != nil {
 		fmt.Printf("[ProxyStream] Request failed for %s: %v\n", u, err)
 		return c.Status(500).SendString("Fetch error: " + err.Error())
 	}
-	defer resp.Body.Close()
-
-	body, _ := io.ReadAll(resp.Body)
 	contentType := resp.Header.Get("Content-Type")
 
 	if resp.StatusCode >= 400 {
+		resp.Body.Close()
 		return c.Status(resp.StatusCode).SendString("Remote server returned error")
 	}
 
@@ -497,6 +427,7 @@ func (h *API) handleProxy(c *fiber.Ctx, u string, ref string) error {
 
 	origin := c.Get("Origin")
 	if !isAllowedOrigin(origin, c) {
+		resp.Body.Close()
 		return c.SendStatus(403)
 	}
 	c.Set("Access-Control-Allow-Origin", origin)
@@ -505,20 +436,35 @@ func (h *API) handleProxy(c *fiber.Ctx, u string, ref string) error {
 	c.Set("Access-Control-Allow-Credentials", "true")
 
 	if c.Method() == "OPTIONS" {
+		resp.Body.Close()
 		return c.SendStatus(204)
 	}
 
 	if strings.Contains(contentType, "dash+xml") || strings.Contains(u, ".mpd") {
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
 		rewritten := rewriteDASHManifest(string(body), u, ref)
 		return c.Send([]byte(rewritten))
 	}
 
 	if strings.Contains(contentType, "mpegURL") || strings.Contains(u, ".m3u8") {
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
 		rewritten := rewriteHLSManifest(string(body), u, ref)
 		return c.Send([]byte(rewritten))
 	}
 
-	return c.Send(body)
+	if resp.ContentLength > 0 {
+		c.Set("Content-Length", strconv.FormatInt(resp.ContentLength, 10))
+	}
+	if cr := resp.Header.Get("Content-Range"); cr != "" {
+		c.Set("Content-Range", cr)
+	}
+	if ar := resp.Header.Get("Accept-Ranges"); ar != "" {
+		c.Set("Accept-Ranges", ar)
+	}
+	c.Status(resp.StatusCode)
+	return c.SendStream(resp.Body)
 }
 
 func isAllowedOrigin(origin string, c *fiber.Ctx) bool {

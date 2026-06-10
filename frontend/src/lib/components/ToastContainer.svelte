@@ -4,7 +4,7 @@
 	import AlertCircle from 'lucide-svelte/icons/alert-circle';
 	import Info from 'lucide-svelte/icons/info';
 	import X from 'lucide-svelte/icons/x';
-	import { flip } from 'svelte/animate';
+
 	import { fade, fly } from 'svelte/transition';
 	import { clsx } from 'clsx';
 </script>
@@ -12,7 +12,7 @@
 <div class="toast-container">
 	{#each toast.toasts as t (t.id)}
 		<div
-			animate:flip={{ duration: 300 }}
+
 			in:fly={{ y: 20, duration: 400 }}
 			out:fade={{ duration: 200 }}
 			class={clsx('toast', t.type)}

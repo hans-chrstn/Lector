@@ -1,6 +1,7 @@
 app.set_id("opds_client")
 local BASE_URL = "https://standardebooks.org/opds/all"
 
+app.register_manifest({type="utility"})
 app.enable_capability("network")
 app.enable_capability("ui")
 app.enable_capability("catalog")

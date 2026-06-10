@@ -14,5 +14,4 @@ type PluginEngine interface {
 	GetPlugin(name string) (LuaPluginInterface, bool)
 	RemovePlugin(name string)
 	AddPlugin(name string, plugin LuaPluginInterface)
-	// We might need to abstract the exact type of LuaPlugin or just expose what's needed.
 }

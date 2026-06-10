@@ -47,6 +47,7 @@ func TestModularPluginSupport(t *testing.T) {
 	db.InitDB(":memory:")
 	t.Run("Lua Defined ID", func(t *testing.T) {
 		luaCode := `
+			app.register_manifest({type="utility"})
 			app.enable_capability("ui")
 			app.set_id("my_custom_id")
 			app.add_action("selection", "Action", "func")
@@ -65,6 +66,7 @@ func TestModularPluginSupport(t *testing.T) {
 
 	t.Run("Selection Actions", func(t *testing.T) {
 		luaCode := `
+			app.register_manifest({type="utility"})
 			app.enable_capability("ui")
 			app.add_action("selection", "Define", "define")
 		`

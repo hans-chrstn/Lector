@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -37,7 +38,7 @@ func main() {
 	})
 
 	app.Use(func(c *fiber.Ctx) error {
-		c.Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline' https://cdn.plyr.io; font-src 'self' data:; connect-src 'self' https://*; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.plyr.io; worker-src 'self' blob:; frame-ancestors 'self'; object-src 'none';")
+		c.Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline' https://cdn.plyr.io; font-src 'self' data:; connect-src 'self' https://* http://*; media-src 'self' blob: https: http: data:; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.plyr.io https://cdn.dashjs.org; worker-src 'self' blob:; frame-ancestors 'self'; object-src 'none';")
 		c.Set("X-Content-Type-Options", "nosniff")
 		c.Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		return c.Next()
@@ -121,6 +122,8 @@ func loadPlugins(store interfaces.PluginDataStore) map[string]*plugin.LuaPlugin 
 	os.MkdirAll(pluginDir, 0755)
 
 	files, _ := os.ReadDir(pluginDir)
+	var mu sync.Mutex
+
 	for _, file := range files {
 		var name string
 		var path string
@@ -134,31 +137,42 @@ func loadPlugins(store interfaces.PluginDataStore) map[string]*plugin.LuaPlugin 
 		} else if filepath.Ext(file.Name()) == ".lua" {
 			name = strings.ToLower(file.Name()[:len(file.Name())-4])
 			path = filepath.Join(pluginDir, file.Name())
-			if _, exists := pluginsMap[name]; exists {
+			mu.Lock()
+			_, exists := pluginsMap[name]
+			mu.Unlock()
+			if exists {
 				continue
 			}
 		} else {
 			continue
 		}
 
-		var p models.Plugin
-		result := db.DB.Where("name = ?", name).First(&p)
-		if result.Error != nil {
-			p = models.Plugin{Name: name, IsEnabled: true}
-			db.DB.Create(&p)
-		}
-
-		if p.IsEnabled {
-			s, err := plugin.NewLuaPlugin(name, path, store)
-			if err == nil {
-				pluginsMap[name] = s
-				log.Printf("[Plugin] Loaded: %s (Verified: %v)", name, s.IsVerified)
-			} else {
-				log.Printf("[Plugin] Failed to load %s from %s: %v", name, path, err)
+		go func(n, p string) {
+			var dbP models.Plugin
+			result := db.DB.Where("name = ?", n).First(&dbP)
+			if result.Error != nil {
+				dbP = models.Plugin{Name: n, IsEnabled: true}
+				db.DB.Create(&dbP)
 			}
-		} else {
-			log.Printf("[Plugin] Skipping disabled plugin: %s", name)
-		}
+
+			if dbP.IsEnabled {
+				s, err := plugin.NewLuaPlugin(n, p, store)
+				if s != nil {
+					mu.Lock()
+					pluginsMap[n] = s
+					mu.Unlock()
+					if err == nil {
+						log.Printf("[Plugin] Loaded: %s (Verified: %v)", n, s.IsVerified)
+					} else {
+						log.Printf("[Plugin] Partially loaded %s with error: %v", n, err)
+					}
+				} else {
+					log.Printf("[Plugin] Failed to load %s from %s: %v", n, p, err)
+				}
+			} else {
+				log.Printf("[Plugin] Skipping disabled plugin: %s", n)
+			}
+		}(name, path)
 	}
 	return pluginsMap
 }

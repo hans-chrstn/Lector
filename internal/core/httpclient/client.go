@@ -53,10 +53,10 @@ var (
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   15 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
-		ForceAttemptHTTP2:     true,
+		ForceAttemptHTTP2:     false,
 		TLSClientConfig: &tls.Config{
 			MinVersion: tls.VersionTLS12,
-			NextProtos: []string{"h2", "http/1.1"},
+			NextProtos: []string{"http/1.1"},
 		},
 	}
 	InternalClient *http.Client
@@ -66,18 +66,19 @@ var (
 func init() {
 	InternalClient = &http.Client{
 		Transport: GlobalTransport,
-		Timeout:   30 * time.Second,
+		Timeout:   5 * time.Minute,
 	}
 	RelaxedClient = &http.Client{
 		Transport: &http.Transport{
-			Proxy: http.ProxyFromEnvironment,
+			Proxy:             http.ProxyFromEnvironment,
+			ForceAttemptHTTP2: false,
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true,
 				MinVersion:         tls.VersionTLS10,
-				NextProtos:         []string{"h2", "http/1.1"},
+				NextProtos:         []string{"http/1.1"},
 			},
 		},
-		Timeout: 30 * time.Second,
+		Timeout: 5 * time.Minute,
 	}
 }
 

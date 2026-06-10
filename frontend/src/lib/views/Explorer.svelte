@@ -6,6 +6,7 @@
 	import LayoutGrid from 'lucide-svelte/icons/layout-grid';
 	import List from 'lucide-svelte/icons/list';
 	import RefreshCw from 'lucide-svelte/icons/refresh-cw';
+	import Loader2 from 'lucide-svelte/icons/loader-2';
 	import BasePage from '../components/base/BasePage.svelte';
 	import DocumentGridItem from '../components/DocumentGridItem.svelte';
 
@@ -19,18 +20,43 @@
 	let loading = $state(false);
 	let content = $state<SearchItem[]>([]);
 	let layout = $state<'grid' | 'list'>('grid');
+	let page = $state(1);
+	let hasMore = $state(false);
+	let loadingMore = $state(false);
 
 	async function refresh() {
 		loading = true;
+		page = 1;
+		hasMore = false;
 		try {
 			if (tabId === 'discovery' || tabId === 'system:discovery') {
 				const results = await api.getDocumentPopular(pluginName);
 				content = results || [];
 			} else {
-				content = [];
+				const results = await api.getDocumentDirectory(pluginName, tabId, page);
+				content = results || [];
+				if (results && results.length >= 20) hasMore = true;
 			}
 		} finally {
 			loading = false;
+		}
+	}
+
+	async function loadMore() {
+		if (loadingMore || !hasMore) return;
+		loadingMore = true;
+		try {
+			const results = await api.getDocumentDirectory(pluginName, tabId, page + 1);
+			if (results && results.length > 0) {
+				const newItems = results.filter((r) => !content.some((c) => c.url === r.url));
+				content = [...content, ...newItems];
+				page++;
+				if (newItems.length === 0 || results.length < 20) hasMore = false;
+			} else {
+				hasMore = false;
+			}
+		} finally {
+			loadingMore = false;
 		}
 	}
 
@@ -95,6 +121,19 @@
 					/>
 				{/each}
 			</div>
+
+			{#if hasMore && content.length > 0}
+				<div class="footer-actions">
+					<button class="load-more" onclick={loadMore} disabled={loadingMore}>
+						{#if loadingMore}
+							<Loader2 size={18} class="spin" />
+							<span>Loading more...</span>
+						{:else}
+							<span>Load More</span>
+						{/if}
+					</button>
+				</div>
+			{/if}
 		{/if}
 	</div>
 </BasePage>
@@ -201,5 +240,36 @@
 
 	.capitalize {
 		text-transform: capitalize;
+	}
+
+	.footer-actions {
+		display: flex;
+		justify-content: center;
+		padding: 2rem 0 4rem 0;
+	}
+
+	.load-more {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.75rem 2rem;
+		background: var(--bg-surface);
+		border: 1px solid var(--border-main);
+		border-radius: 8px;
+		color: var(--text-main);
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+
+	.load-more:hover:not(:disabled) {
+		background: var(--bg-main);
+		border-color: var(--primary);
+		color: var(--primary);
+	}
+
+	.load-more:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
 	}
 </style>

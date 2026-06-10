@@ -94,7 +94,13 @@ export const api = {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ url, source })
-		}).then((r) => r.json());
+		}).then(async (r) => {
+			if (!r.ok) {
+				const err = await r.json().catch(() => ({ error: r.statusText }));
+				throw new Error(err.error || 'Failed to load document');
+			}
+			return r.json();
+		});
 	},
 	async refreshDocument(id: number): Promise<LectorDocument> {
 		return fetch(`${getBase()}/api/documents/${id}/refresh`, {
@@ -221,6 +227,9 @@ export const api = {
 	},
 	async getDocumentPopular(plugin: string, page = 1): Promise<SearchItem[]> {
 		return fetch(`${getBase()}/api/plugins/${plugin}/popular?page=${page}`).then((r) => r.json());
+	},
+	async getDocumentDirectory(plugin: string, id: string, page = 1): Promise<SearchItem[]> {
+		return fetch(`${getBase()}/api/plugins/${plugin}/directory/${encodeURIComponent(id)}?page=${page}`).then((r) => r.json());
 	},
 	async getDocumentLatest(plugin: string, page = 1): Promise<SearchItem[]> {
 		return fetch(`${getBase()}/api/plugins/${plugin}/latest?page=${page}`).then((r) => r.json());

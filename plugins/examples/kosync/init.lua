@@ -1,4 +1,5 @@
 app.set_id("kosync")
+app.register_manifest({type="utility"})
 app.enable_capability("network")
 app.enable_capability("ui")
 app.enable_capability("doc")

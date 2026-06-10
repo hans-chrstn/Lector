@@ -1,4 +1,5 @@
 app.set_id("hello_world")
+app.register_manifest({type="utility"})
 app.enable_capability("ui")
 
 app.add_section("examples", "Examples")

@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"os"
-	"runtime"
+
 	"strings"
 	"sync"
 	"time"
@@ -22,6 +22,7 @@ const OfficialPublicKey = "7c9e1e79268f702672a969f69792688972a969f69792688972a96
 
 type PluginSource interface {
 	Search(query string) ([]models.SearchItem, error)
+	GetDirectory(id string, page int) ([]models.SearchItem, error)
 	GetDocument(url string) (models.Document, error)
 	GetChapter(url string) (models.Chapter, error)
 	GetPopular(page int) ([]models.SearchItem, error)
@@ -47,6 +48,7 @@ type LuaPlugin struct {
 	CSS                string
 	IsVerified         bool
 	NetworkProfileName string
+	Type               string
 }
 
 type Action struct {
@@ -83,34 +85,6 @@ type PluginEngine struct {
 var GlobalPlugins map[string]*LuaPlugin
 var PluginsMu sync.Mutex
 
-func MonitorMemory(ctx context.Context, cancel context.CancelFunc, limit int64) context.CancelFunc {
-	memCtx, memCancel := context.WithCancel(ctx)
-	go func() {
-		var initialStats runtime.MemStats
-		runtime.ReadMemStats(&initialStats)
-		initialAlloc := initialStats.Alloc
-
-		ticker := time.NewTicker(100 * time.Millisecond)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-memCtx.Done():
-				return
-			case <-ticker.C:
-				var currentStats runtime.MemStats
-				runtime.ReadMemStats(&currentStats)
-				used := int64(currentStats.Alloc) - int64(initialAlloc)
-				if used > limit {
-					cancel()
-					return
-				}
-			}
-		}
-	}()
-	return memCancel
-}
-
 func NewLuaPlugin(name, path string, store interfaces.PluginDataStore) (*LuaPlugin, error) {
 	L := lua.NewState(lua.Options{
 		SkipOpenLibs:        true,
@@ -118,6 +92,8 @@ func NewLuaPlugin(name, path string, store interfaces.PluginDataStore) (*LuaPlug
 		RegistrySize:        128,
 		RegistryMaxSize:     1024,
 	})
+
+	L.SetMx(256)
 
 	for _, pair := range []struct {
 		n string
@@ -158,6 +134,7 @@ func NewLuaPlugin(name, path string, store interfaces.PluginDataStore) (*LuaPlug
 		UIOverrides:    make(map[string]map[string]string),
 		Permissions:    []string{},
 		Capabilities:   []string{},
+		Type:           "source",
 	}
 
 	s.IsVerified = s.verifySignature()
@@ -170,22 +147,23 @@ func NewLuaPlugin(name, path string, store interfaces.PluginDataStore) (*LuaPlug
 
 	s.registerFunctions()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	L.SetContext(ctx)
 
-	stopMonitor := MonitorMemory(ctx, cancel, 50*1024*1024)
-	defer stopMonitor()
-
-	if err := L.DoFile(path); err != nil {
-		return nil, err
-	}
+	loadErr := L.DoFile(path)
 
 	if err := s.Validate(); err != nil {
-		return nil, err
+		L.Close()
+		return nil, fmt.Errorf("validation failed: %w (load error: %v)", err, loadErr)
 	}
 
-	return s, nil
+	if loadErr != nil {
+		L.Close()
+		s.L = nil
+	}
+
+	return s, loadErr
 }
 
 func (s *LuaPlugin) verifySignature() bool {
@@ -215,29 +193,16 @@ func (s *LuaPlugin) Validate() error {
 	}
 	s.ManifestMu.RLock()
 	capLen := len(s.Capabilities)
+	pluginType := s.Type
 	s.ManifestMu.RUnlock()
 
 	if capLen == 0 {
 		return fmt.Errorf("plugin has no capabilities enabled (use app.enable_capability)")
 	}
 
-	hasSourceFuncs := true
-	for _, fn := range []string{"search", "get_document", "get_chapter"} {
-		s.Mu.Lock()
-		f := s.L.GetGlobal(fn)
-		s.Mu.Unlock()
-		if f.Type() != lua.LTFunction {
-			hasSourceFuncs = false
-			break
-		}
-	}
-
-	s.ManifestMu.RLock()
-	hasUI := len(s.Tabs) > 0 || len(s.Actions) > 0 || len(s.SettingsGroups) > 0 || len(s.Sections) > 0 || len(s.UIOverrides) > 0
-	s.ManifestMu.RUnlock()
-
-	if !hasSourceFuncs && !hasUI {
-		return fmt.Errorf("plugin is empty: no source functions and no UI elements defined")
+	validator := GetValidator(pluginType)
+	if err := validator.Validate(s); err != nil {
+		return fmt.Errorf("[%s validation failed] %w", pluginType, err)
 	}
 
 	return nil

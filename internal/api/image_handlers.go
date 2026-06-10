@@ -29,7 +29,7 @@ func (h *API) ProxyImage(c *fiber.Ctx) error {
 		return c.SendFile(absPath)
 	}
 	if imgURL == "MISSING" {
-		return c.Status(404).JSON(fiber.Map{"error": "No image URL provided"})
+		return c.SendStatus(204)
 	}
 	if !strings.HasPrefix(imgURL, "http://") && !strings.HasPrefix(imgURL, "https://") {
 		if strings.HasPrefix(imgURL, "//") {
@@ -65,17 +65,21 @@ func (h *API) ProxyImage(c *fiber.Ctx) error {
 	req, _ := http.NewRequest("GET", imgURL, nil)
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36")
 	req.Header.Set("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
-	resp, err := httpclient.InternalClient.Do(req)
+	client := httpclient.InternalClient
+	if h.IsLocalNetworkAuthorized(imgURL) {
+		client = httpclient.RelaxedClient
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		fmt.Printf("[ImageProxy] Error fetching %s: %v\n", imgURL, err)
-		return c.Status(404).JSON(fiber.Map{"error": "Image not found"})
+		return c.SendStatus(204)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		if resp.StatusCode != 404 {
 			fmt.Printf("[ImageProxy] Remote server returned %d for %s\n", resp.StatusCode, imgURL)
 		}
-		return c.Status(404).JSON(fiber.Map{"error": "Image not found"})
+		return c.SendStatus(204)
 	}
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {

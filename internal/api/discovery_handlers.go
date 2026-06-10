@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/gofiber/fiber/v2"
@@ -113,4 +114,33 @@ func (h *API) GetActivePluginNames() []string {
 		}
 	}
 	return n
+}
+
+func (h *API) PluginDirectory(c *fiber.Ctx) error {
+	pluginName := strings.ToLower(c.Params("name"))
+	dirId := c.Params("id")
+	page := c.QueryInt("page", 1)
+
+	s, ok := h.Engine.Plugins[pluginName]
+	if !ok {
+		return c.Status(404).JSON(fiber.Map{"error": "Plugin not found"})
+	}
+
+	res, err := s.GetDirectory(dirId, page)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": fmt.Sprintf("%v", err)})
+	}
+
+	var results []map[string]interface{}
+	for _, item := range res {
+		results = append(results, map[string]interface{}{
+			"title":     item.Title,
+			"url":       item.URL,
+			"cover_url": item.CoverURL,
+			"info":      item.Info,
+			"source":    pluginName,
+		})
+	}
+
+	return c.JSON(results)
 }
