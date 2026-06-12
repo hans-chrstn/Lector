@@ -37,9 +37,9 @@ func (h *API) TrackAnalytics(c *fiber.Ctx) error {
 		Clauses(clause.OnConflict{
 			Columns: []clause.Column{{Name: "date"}},
 			DoUpdates: clause.Assignments(map[string]interface{}{
-				"read_seconds":   gorm.Expr("reading_stats.read_seconds + ?", readSeconds),
-				"chapters_read":  gorm.Expr("reading_stats.chapters_read + ?", chaptersRead),
-				"documents_read": gorm.Expr("reading_stats.documents_read + ?", documentsRead),
+				"read_seconds":   gorm.Expr("read_seconds + ?", readSeconds),
+				"chapters_read":  gorm.Expr("chapters_read + ?", chaptersRead),
+				"documents_read": gorm.Expr("documents_read + ?", documentsRead),
 			}),
 		}).
 		Create(&models.ReadingStat{

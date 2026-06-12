@@ -62,8 +62,15 @@ func (h *API) GetPluginsManifest(c *fiber.Ctx) error {
 	db.DB.WithContext(c.UserContext()).Order("priority ASC, name ASC").Find(&dbPlugins)
 
 	manifests := []PluginManifest{}
+	seen := make(map[string]bool)
+
 	for _, p := range dbPlugins {
 		name := strings.ToLower(p.Name)
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+
 		var sPath string
 		var info os.FileInfo
 
