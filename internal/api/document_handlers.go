@@ -38,7 +38,7 @@ func populateChapterCounts(ctx context.Context, docs []models.Document) {
 	}
 	var counts []ChapterCount
 	db.DB.WithContext(ctx).Model(&models.Chapter{}).
-		Select("document_id, sum(case when is_read = 1 then 1 else 0 end) as read_count, count(*) as total_count").
+		Select("document_id, sum(case when is_read then 1 else 0 end) as read_count, count(*) as total_count").
 		Where("document_id IN ?", docIDs).
 		Group("document_id").Find(&counts)
 
