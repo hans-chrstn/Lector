@@ -72,6 +72,3 @@ func migrateTable[T any](sourceDB *gorm.DB, targetDB *gorm.DB, tableName string,
 	log.Printf("  -> Successfully migrated %d records.", len(*dest))
 	return nil
 }
-records.", len(*dest))
-	return nil
-}
