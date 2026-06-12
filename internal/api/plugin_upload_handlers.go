@@ -150,13 +150,14 @@ func (h *API) DeletePlugin(c *fiber.Ctx) error {
 	name := strings.ToLower(c.Params("name"))
 
 	pluginDir := getPluginDir()
-	dirPath := filepath.Join(pluginDir, name)
-	filePath := filepath.Join(pluginDir, name+".lua")
 
-	if info, err := os.Stat(dirPath); err == nil && info.IsDir() {
-		os.RemoveAll(dirPath)
-	} else {
-		os.Remove(filePath)
+	files, _ := os.ReadDir(pluginDir)
+	for _, file := range files {
+		if file.IsDir() && strings.ToLower(file.Name()) == name {
+			os.RemoveAll(filepath.Join(pluginDir, file.Name()))
+		} else if !file.IsDir() && strings.ToLower(strings.TrimSuffix(file.Name(), ".lua")) == name {
+			os.Remove(filepath.Join(pluginDir, file.Name()))
+		}
 	}
 
 	delete(h.Engine.Plugins, name)
