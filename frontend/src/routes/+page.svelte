@@ -46,6 +46,8 @@
 	let onConfirm: (() => void) | null = $state(null);
 
 	let searchItems = $state<SearchItem[]>([]);
+	let searchQuery = $state('');
+	let searchSource = $state('library');
 	let popularResults = $state<SearchItem[]>([]);
 	let latestResults = $state<SearchItem[]>([]);
 	let activeDocument = $state<LectorDocument | null>(null);
@@ -160,6 +162,16 @@
 	async function handleNavigate(targetView: string, plugin?: string, tabId?: string) {
 		sidebarOpen = false;
 
+		if (targetView === 'search' && originNav.view !== 'search') {
+			searchQuery = '';
+			searchSource = 'library';
+			searchItems = [];
+		} else if (targetView === 'search' && view === 'search') {
+			searchQuery = '';
+			searchSource = 'library';
+			searchItems = [];
+		}
+
 		if (targetView !== 'detail' && targetView !== 'reader') {
 			originNav = {
 				view: targetView,
@@ -202,12 +214,23 @@
 	async function handleSearch(q: string, source: string) {
 		loading = true;
 		try {
-			const res = await api.search(source, q);
-			searchItems = res.results || [];
-			if (res.errors && res.errors.length > 0) {
-				res.errors.forEach((err: string) => {
-					toast.error(err);
-				});
+			if (source === 'library') {
+				const res = await api.searchLibrary(q);
+				searchItems = (res || []).map((doc) => ({
+					title: doc.title,
+					url: doc.url,
+					cover_url: doc.cover_url,
+					info: doc.author || doc.source,
+					source: doc.source
+				}));
+			} else {
+				const res = await api.search(source, q);
+				searchItems = res.results || [];
+				if (res.errors && res.errors.length > 0) {
+					res.errors.forEach((err: string) => {
+						toast.error(err);
+					});
+				}
 			}
 		} finally {
 			loading = false;
@@ -345,6 +368,8 @@
 					{plugins}
 					results={searchItems}
 					{loading}
+					bind:query={searchQuery}
+					bind:source={searchSource}
 					onSearch={handleSearch}
 					onSelect={handleSelectDocument}
 				/>

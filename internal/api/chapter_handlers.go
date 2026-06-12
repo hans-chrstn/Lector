@@ -20,7 +20,7 @@ func (h *API) GetChapterByID(c *fiber.Ctx) error {
 	if ch.Content == "" && (ch.Metadata == "" || ch.Metadata == "[]" || ch.Metadata == "null") {
 		var document models.Document
 		db.DB.WithContext(c.UserContext()).Find(&document, ch.DocumentID)
-		
+
 		if document.Source == "local" {
 			content, err := services.ExtractLocalChapter(document.URL, ch.URL, ch.Title)
 			if err == nil {

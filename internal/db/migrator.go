@@ -39,6 +39,9 @@ func RunDataMigration(sourceDB *gorm.DB, targetDB *gorm.DB) error {
 	if err := migrateTable(sourceDB, targetDB, "cache_items", &[]models.CacheItem{}); err != nil {
 		return err
 	}
+	if err := migrateTable(sourceDB, targetDB, "jobs", &[]models.Job{}); err != nil {
+		return err
+	}
 	return nil
 }
 

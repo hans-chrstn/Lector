@@ -10,6 +10,7 @@ public/
 plugins/*
 !plugins/examples/
 /lector
+/db-migrator
 *.exe
 frontend/.svelte-kit/
 frontend/build/

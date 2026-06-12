@@ -2,15 +2,12 @@ package api
 
 import (
 	"strconv"
-	"sync/atomic"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/user/lector/internal/db"
 	"github.com/user/lector/internal/models"
 	"github.com/user/lector/internal/services"
 )
-
-var isScanning atomic.Bool
 
 func (h *API) GetLibraryPaths(c *fiber.Ctx) error {
 	var paths []models.LibraryPath
@@ -71,20 +68,9 @@ func (h *API) DeleteLibraryPath(c *fiber.Ctx) error {
 }
 
 func (h *API) ScanLibrary(c *fiber.Ctx) error {
-	if isScanning.CompareAndSwap(false, true) {
-		go func() {
-			defer isScanning.Store(false)
-			services.ScanLibraryPaths()
-		}()
-		return c.JSON(fiber.Map{"status": "Scan initiated"})
+	job, err := services.DefaultJobManager.Enqueue("scan_library", nil)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to enqueue scan job"})
 	}
-	return c.Status(429).JSON(fiber.Map{"error": "Scan already in progress"})
-}
-
-func (h *API) ScanStatus(c *fiber.Ctx) error {
-	return c.JSON(fiber.Map{
-		"is_scanning": isScanning.Load(),
-		"total":       services.ScanTotal.Load(),
-		"done":        services.ScanDone.Load(),
-	})
+	return c.JSON(fiber.Map{"status": "Scan initiated", "job_id": job.ID})
 }

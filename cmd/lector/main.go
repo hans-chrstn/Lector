@@ -24,6 +24,7 @@ import (
 
 func main() {
 	db.InitDB("lector.db")
+	services.InitJobManager()
 	os.MkdirAll("exports", 0755)
 	os.MkdirAll("plugins", 0755)
 	services.EnsureUploadsDir()

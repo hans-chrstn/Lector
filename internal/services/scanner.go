@@ -1,12 +1,14 @@
 package services
 
 import (
+	"fmt"
 	"io/fs"
 	"log"
 	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/user/lector/internal/db"
 	"github.com/user/lector/internal/models"
@@ -22,7 +24,7 @@ type scanJob struct {
 	path string
 }
 
-func ScanLibraryPaths() {
+func ScanLibraryPaths(updateFunc func(int, string)) {
 	var paths []models.LibraryPath
 	if err := db.DB.Find(&paths).Error; err != nil {
 		log.Printf("[Scanner] Failed to fetch library paths: %v", err)
@@ -31,6 +33,10 @@ func ScanLibraryPaths() {
 
 	ScanTotal.Store(0)
 	ScanDone.Store(0)
+
+	if updateFunc != nil {
+		updateFunc(0, "Discovering files...")
+	}
 
 	jobs := make(chan scanJob, 1000)
 	var wg sync.WaitGroup
@@ -60,12 +66,38 @@ func ScanLibraryPaths() {
 			return nil
 		})
 	}
-	
+
 	close(jobs)
+
+	doneCh := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if updateFunc != nil {
+					t := int(ScanTotal.Load())
+					d := int(ScanDone.Load())
+					if t > 0 {
+						pct := (d * 100) / t
+						updateFunc(pct, fmt.Sprintf("Scanned %d / %d", d, t))
+					}
+				}
+			case <-doneCh:
+				return
+			}
+		}
+	}()
+
 	wg.Wait()
+	close(doneCh)
+
+	if updateFunc != nil {
+		updateFunc(100, "Library scan complete")
+	}
 	log.Printf("[Scanner] Library scan complete")
 }
-
 func isSupportedFormat(path string) bool {
 	ext := strings.ToLower(filepath.Ext(path))
 	return ext == ".epub" || ext == ".pdf" || ext == ".cbz" || ext == ".cbr"

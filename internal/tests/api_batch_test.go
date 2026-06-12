@@ -11,11 +11,13 @@ import (
 	"github.com/user/lector/internal/db"
 	"github.com/user/lector/internal/models"
 	"github.com/user/lector/internal/plugin"
+	"github.com/user/lector/internal/services"
 )
 
 func TestBatchAPI(t *testing.T) {
 	app := fiber.New()
 	db.InitDB(":memory:")
+	services.DefaultJobManager = services.InitJobManager()
 	engine := &plugin.PluginEngine{
 		Store:   db.NewPluginRepository(),
 		Plugins: make(map[string]*plugin.LuaPlugin),

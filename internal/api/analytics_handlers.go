@@ -43,10 +43,10 @@ func (h *API) TrackAnalytics(c *fiber.Ctx) error {
 			}),
 		}).
 		Create(&models.ReadingStat{
-			Date:           dateStr,
-			ReadSeconds:    readSeconds,
-			ChaptersRead:   chaptersRead,
-			DocumentsRead:  documentsRead,
+			Date:          dateStr,
+			ReadSeconds:   readSeconds,
+			ChaptersRead:  chaptersRead,
+			DocumentsRead: documentsRead,
 		}).Error
 
 	if err != nil {

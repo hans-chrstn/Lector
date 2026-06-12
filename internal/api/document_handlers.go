@@ -124,6 +124,9 @@ func (h *API) EnsureDocument(c *fiber.Ctx) error {
 			fmt.Printf("[API] Error creating chapters for %s: %v\n", doc.Title, err)
 		}
 	} else {
+		doc.Source = pluginName
+		db.DB.WithContext(c.UserContext()).Save(doc)
+
 		var count int64
 		db.DB.WithContext(c.UserContext()).Model(&models.Chapter{}).Where("document_id = ?", doc.ID).Count(&count)
 
@@ -220,33 +223,12 @@ func (h *API) BatchRefreshDocuments(c *fiber.Ctx) error {
 		return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
 	}
 
-	for _, id := range req.IDs {
-		doc, err := h.DocumentService.GetByID(uint(id))
-		if err == nil && doc.Source != "local" {
-			if s, ok := h.Engine.Plugins[doc.Source]; ok {
-				if fetched, err := s.GetDocument(doc.URL); err == nil && fetched.Title != "" {
-					doc.CoverURL = fetched.CoverURL
-					doc.Author = fetched.Author
-					doc.Synopsis = fetched.Synopsis
-					db.DB.WithContext(c.UserContext()).Save(doc)
-
-					for i := range fetched.Chapters {
-						fetched.Chapters[i].DocumentID = doc.ID
-						fetched.Chapters[i].ID = 0
-						fetched.Chapters[i].Order = i + 1
-					}
-					db.DB.WithContext(c.UserContext()).Clauses(clause.OnConflict{
-						Columns:   []clause.Column{{Name: "document_id"}, {Name: "url"}},
-						DoUpdates: clause.AssignmentColumns([]string{"title", "order_val"}),
-					}).CreateInBatches(fetched.Chapters, 100)
-				}
-			}
-		} else if err == nil && doc.Source == "local" {
-			services.ProcessLocalFile(doc.LocalPath)
-		}
+	job, err := services.DefaultJobManager.Enqueue("batch_refresh", req)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to enqueue job"})
 	}
 
-	return c.JSON(fiber.Map{"status": "success"})
+	return c.JSON(fiber.Map{"status": "success", "job_id": job.ID})
 }
 
 func (h *API) SearchLibrary(c *fiber.Ctx) error {
@@ -256,11 +238,11 @@ func (h *API) SearchLibrary(c *fiber.Ctx) error {
 	}
 
 	var documents []models.Document
-	
+
 	if db.DB.Dialector.Name() == "postgres" {
 		db.DB.WithContext(c.UserContext()).
-			Where("title ILIKE ? OR author ILIKE ? OR synopsis ILIKE ? OR genres ILIKE ?", 
-			"%"+query+"%", "%"+query+"%", "%"+query+"%", "%"+query+"%").
+			Where("title ILIKE ? OR author ILIKE ? OR synopsis ILIKE ? OR genres ILIKE ?",
+				"%"+query+"%", "%"+query+"%", "%"+query+"%", "%"+query+"%").
 			Find(&documents)
 	} else {
 		err := db.DB.WithContext(c.UserContext()).Raw(`

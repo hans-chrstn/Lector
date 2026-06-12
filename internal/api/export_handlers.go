@@ -40,6 +40,8 @@ func (h *API) ExportDocument(c *fiber.Ctx) error {
 	ext := "epub"
 	if format == "pdf" {
 		ext = "pdf"
+	} else if format == "cbz" {
+		ext = "cbz"
 	}
 
 	os.MkdirAll("exports", 0755)
@@ -51,6 +53,8 @@ func (h *API) ExportDocument(c *fiber.Ctx) error {
 	var binderErr error
 	if format == "pdf" {
 		binderErr = binder.BindPDF(&doc, path)
+	} else if format == "cbz" {
+		binderErr = binder.BindCBZ(&doc, path)
 	} else {
 		binderErr = binder.BindEPUB(&doc, path)
 	}

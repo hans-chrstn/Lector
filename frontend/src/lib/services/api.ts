@@ -225,6 +225,7 @@ export const api = {
 			`${getBase()}/api/search?q=${encodeURIComponent(query)}&plugin=${encodeURIComponent(source)}`
 		).then((r) => r.json());
 	},
+
 	async getDocumentPopular(plugin: string, page = 1): Promise<SearchItem[]> {
 		return fetch(`${getBase()}/api/plugins/${plugin}/popular?page=${page}`).then((r) => r.json());
 	},
@@ -314,5 +315,17 @@ export const api = {
 	},
 	async getAnalytics(): Promise<ReadingStat[]> {
 		return fetch(`${getBase()}/api/analytics`).then((r) => r.json());
+	},
+	connectSSE<T>(onJobUpdate: (job: T) => void): () => void {
+		const es = new EventSource(`${getBase()}/api/events`);
+		es.addEventListener('job_update', (e) => {
+			try {
+				const job = JSON.parse(e.data);
+				onJobUpdate(job as T);
+			} catch (err) {
+				console.error('Failed to parse job update', err);
+			}
+		});
+		return () => es.close();
 	}
 };

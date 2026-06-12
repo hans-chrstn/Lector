@@ -24,6 +24,10 @@ func RegisterRoutes(app *fiber.App, engine *plugin.PluginEngine) {
 
 	api := app.Group("/api")
 
+	RegisterJobs(h)
+
+	api.Get("/events", h.SSEEvents)
+
 	api.Get("/plugins", h.GetActivePlugins)
 	api.Get("/plugins/all", h.GetPlugins)
 	api.Get("/plugins/manifest", h.GetPluginsManifest)
@@ -69,7 +73,6 @@ func RegisterRoutes(app *fiber.App, engine *plugin.PluginEngine) {
 	api.Post("/library/paths", h.AddLibraryPath)
 	api.Delete("/library/paths/:id", h.DeleteLibraryPath)
 	api.Post("/library/scan", h.ScanLibrary)
-	api.Get("/library/scan/status", h.ScanStatus)
 
 	api.Get("/chapters/:id", h.GetChapterByID)
 	api.Post("/chapters/:id/read", h.ToggleChapterRead)
