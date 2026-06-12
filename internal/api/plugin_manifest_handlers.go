@@ -13,6 +13,12 @@ import (
 )
 
 func (h *API) GetPluginsManifest(c *fiber.Ctx) error {
+	if h.Engine == nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Plugin engine not initialized"})
+	}
+
+	eng := h.Engine
+
 	type PluginManifest struct {
 		Name           string                       `json:"name"`
 		IsEnabled      bool                         `json:"is_enabled"`
@@ -63,44 +69,70 @@ func (h *API) GetPluginsManifest(c *fiber.Ctx) error {
 
 		if dirInfo, err := os.Stat(filepath.Join(pluginDir, name)); err == nil && dirInfo.IsDir() {
 			sPath = filepath.Join(pluginDir, name, "init.lua")
-			info, _ = os.Stat(sPath)
+			info, err = os.Stat(sPath)
+			if err != nil {
+				sPath = ""
+				info = nil
+			}
 		} else if fileInfo, err := os.Stat(filepath.Join(pluginDir, name+".lua")); err == nil {
 			sPath = filepath.Join(pluginDir, name+".lua")
 			info = fileInfo
 		}
 
-		if sPath == "" {
-			if _, exists := h.Engine.Plugins[name]; exists {
-				delete(h.Engine.Plugins, name)
+		if sPath == "" || info == nil {
+			eng.Mu.Lock()
+			if eng.Plugins != nil {
+				delete(eng.Plugins, name)
 			}
+			eng.Mu.Unlock()
 			continue
 		}
 
 		if p.IsEnabled {
-			h.Engine.Mu.Lock()
-			s, exists := h.Engine.Plugins[name]
-			h.Engine.Mu.Unlock()
-			if !exists || (info != nil && info.ModTime().After(s.LoadedAt)) {
+			eng.Mu.Lock()
+			if eng.Plugins == nil {
+				eng.Plugins = make(map[string]*plugin.LuaPlugin)
+			}
+			s, exists := eng.Plugins[name]
+			eng.Mu.Unlock()
+
+			if !exists || (s == nil || info.ModTime().After(s.LoadedAt)) {
+				modTime := info.ModTime()
 				go func(n, path string, mTime time.Time) {
-					newS, _ := plugin.NewLuaPlugin(n, path, h.Engine.Store)
+					newS, _ := plugin.NewLuaPlugin(n, path, eng.Store)
 					if newS != nil {
 						newS.LoadedAt = mTime
-						h.Engine.Mu.Lock()
-						h.Engine.Plugins[n] = newS
-						h.Engine.Mu.Unlock()
+						eng.Mu.Lock()
+						if eng.Plugins == nil {
+							eng.Plugins = make(map[string]*plugin.LuaPlugin)
+						}
+						eng.Plugins[n] = newS
+						eng.Mu.Unlock()
 					}
-				}(name, sPath, info.ModTime())
+				}(name, sPath, modTime)
 			}
 		} else {
-			h.Engine.Mu.Lock()
-			delete(h.Engine.Plugins, name)
-			h.Engine.Mu.Unlock()
+			eng.Mu.Lock()
+			if eng.Plugins != nil {
+				delete(eng.Plugins, name)
+			}
+			eng.Mu.Unlock()
 		}
+
+		var s *plugin.LuaPlugin
+		var isLoaded bool
+
+		eng.Mu.Lock()
+		if eng.Plugins != nil {
+			s = eng.Plugins[name]
+		}
+		isLoaded = s != nil
+		eng.Mu.Unlock()
 
 		m := PluginManifest{
 			Name:           name,
 			IsEnabled:      p.IsEnabled,
-			IsLoaded:       h.Engine.Plugins[name] != nil,
+			IsLoaded:       isLoaded,
 			Tabs:           []plugin.Tab{},
 			Sections:       []plugin.Section{},
 			SettingsGroups: []plugin.SettingsGroup{},
@@ -110,12 +142,7 @@ func (h *API) GetPluginsManifest(c *fiber.Ctx) error {
 			Capabilities:   []string{},
 		}
 
-		if s, ok := func() (*plugin.LuaPlugin, bool) {
-			h.Engine.Mu.Lock()
-			defer h.Engine.Mu.Unlock()
-			p, ok := h.Engine.Plugins[name]
-			return p, ok
-		}(); ok {
+		if isLoaded && s != nil {
 			m.IsVerified = s.IsVerified
 			m.Tabs = s.Tabs
 			if m.Tabs == nil {
@@ -193,10 +220,19 @@ func (h *API) TogglePlugin(c *fiber.Ctx) error {
 
 		s, _ := plugin.NewLuaPlugin(name, sPath, h.Engine.Store)
 		if s != nil {
+			h.Engine.Mu.Lock()
+			if h.Engine.Plugins == nil {
+				h.Engine.Plugins = make(map[string]*plugin.LuaPlugin)
+			}
 			h.Engine.Plugins[name] = s
+			h.Engine.Mu.Unlock()
 		}
 	} else {
-		delete(h.Engine.Plugins, name)
+		h.Engine.Mu.Lock()
+		if h.Engine.Plugins != nil {
+			delete(h.Engine.Plugins, name)
+		}
+		h.Engine.Mu.Unlock()
 	}
 
 	return c.JSON(p)
