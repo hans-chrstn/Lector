@@ -5,16 +5,45 @@ import (
 	"log"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/user/lector/internal/db"
 	"github.com/user/lector/internal/models"
 )
+
+var (
+	ScanTotal atomic.Int32
+	ScanDone  atomic.Int32
+)
+
+type scanJob struct {
+	lp   models.LibraryPath
+	path string
+}
 
 func ScanLibraryPaths() {
 	var paths []models.LibraryPath
 	if err := db.DB.Find(&paths).Error; err != nil {
 		log.Printf("[Scanner] Failed to fetch library paths: %v", err)
 		return
+	}
+
+	ScanTotal.Store(0)
+	ScanDone.Store(0)
+
+	jobs := make(chan scanJob, 1000)
+	var wg sync.WaitGroup
+
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for job := range jobs {
+				processFileFromScanner(job.lp, job.path)
+				ScanDone.Add(1)
+			}
+		}()
 	}
 
 	for _, lp := range paths {
@@ -25,11 +54,15 @@ func ScanLibraryPaths() {
 			}
 
 			if isSupportedFormat(path) {
-				processFileFromScanner(lp, path)
+				ScanTotal.Add(1)
+				jobs <- scanJob{lp: lp, path: path}
 			}
 			return nil
 		})
 	}
+	
+	close(jobs)
+	wg.Wait()
 	log.Printf("[Scanner] Library scan complete")
 }
 
@@ -104,12 +137,23 @@ func IsPathAuthorized(absPath string) bool {
 	}
 	var paths []models.LibraryPath
 	db.DB.Find(&paths)
+
+	checkPrefix := func(path, prefix string) bool {
+		if path == prefix {
+			return true
+		}
+		if !strings.HasSuffix(prefix, string(filepath.Separator)) {
+			prefix += string(filepath.Separator)
+		}
+		return strings.HasPrefix(path, prefix)
+	}
+
 	for _, lp := range paths {
 		cleanLP, _ := filepath.Abs(filepath.Clean(lp.Path))
-		if strings.HasPrefix(absPath, cleanLP) {
+		if checkPrefix(absPath, cleanLP) {
 			return true
 		}
 	}
 	uploadsDir, _ := filepath.Abs("uploads")
-	return strings.HasPrefix(absPath, uploadsDir)
+	return checkPrefix(absPath, uploadsDir)
 }

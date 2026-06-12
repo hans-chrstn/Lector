@@ -229,7 +229,9 @@ export const api = {
 		return fetch(`${getBase()}/api/plugins/${plugin}/popular?page=${page}`).then((r) => r.json());
 	},
 	async getDocumentDirectory(plugin: string, id: string, page = 1): Promise<SearchItem[]> {
-		return fetch(`${getBase()}/api/plugins/${plugin}/directory/${encodeURIComponent(id)}?page=${page}`).then((r) => r.json());
+		return fetch(
+			`${getBase()}/api/plugins/${plugin}/directory/${encodeURIComponent(id)}?page=${page}`
+		).then((r) => r.json());
 	},
 	async getDocumentLatest(plugin: string, page = 1): Promise<SearchItem[]> {
 		return fetch(`${getBase()}/api/plugins/${plugin}/latest?page=${page}`).then((r) => r.json());

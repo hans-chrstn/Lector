@@ -19,7 +19,7 @@ import (
 	"github.com/user/lector/internal/core/sanitizer"
 	"github.com/user/lector/internal/db"
 	"github.com/user/lector/internal/plugin"
-	"github.com/user/lector/internal/repository"
+
 	"github.com/user/lector/internal/services"
 )
 
@@ -53,7 +53,7 @@ func TestUploadSecurityHardening(t *testing.T) {
 
 	plugins := make(map[string]*plugin.LuaPlugin)
 	engine := &plugin.PluginEngine{
-		Store:   repository.NewPluginRepository(),
+		Store:   db.NewPluginRepository(),
 		Plugins: plugins,
 	}
 	api.RegisterRoutes(app, engine)
@@ -230,7 +230,7 @@ func TestLFIPolish(t *testing.T) {
 	app := fiber.New()
 	db.InitDB(":memory:")
 	engine := &plugin.PluginEngine{
-		Store:   repository.NewPluginRepository(),
+		Store:   db.NewPluginRepository(),
 		Plugins: make(map[string]*plugin.LuaPlugin),
 	}
 	api.RegisterRoutes(app, engine)
@@ -263,6 +263,10 @@ func TestSecurityHeaders(t *testing.T) {
 }
 
 func TestDatabasePermissions(t *testing.T) {
+	if os.Getenv("DB_DRIVER") == "postgres" {
+		t.Skip("Skipping local SQLite permissions test for PostgreSQL")
+	}
+
 	path := "test_perms.db"
 	defer os.Remove(path)
 

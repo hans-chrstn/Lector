@@ -6,9 +6,11 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/user/lector/internal/binder"
 	"github.com/user/lector/internal/core/sanitizer"
+	"github.com/user/lector/internal/models"
 	lua "github.com/yuin/gopher-lua"
 	"os"
 	"path/filepath"
+	"strconv"
 )
 
 func (s *LuaPlugin) registerDocFunctions() {
@@ -18,6 +20,7 @@ func (s *LuaPlugin) registerDocFunctions() {
 	s.L.SetField(doc, "clean", s.L.NewFunction(s.docClean))
 	s.L.SetField(doc, "update_chapter_content", s.L.NewFunction(s.docUpdateChapterContent))
 	s.L.SetField(doc, "update_chapter_metadata", s.L.NewFunction(s.docUpdateChapterMetadata))
+	s.L.SetField(doc, "batch_upsert_chapters", s.L.NewFunction(s.docBatchUpsertChapters))
 	s.L.SetField(doc, "update_metadata", s.L.NewFunction(s.docUpdateMetadata))
 	s.L.SetField(doc, "get_chapters", s.L.NewFunction(s.docGetChapters))
 	s.L.SetField(doc, "list", s.L.NewFunction(s.docList))
@@ -83,6 +86,37 @@ func (s *LuaPlugin) docUpdateChapterMetadata(L *lua.LState) int {
 	metadata := L.CheckString(2)
 
 	success := s.Store.UpdateChapterMetadata(chapterID, s.Name, s.HasCapability("global_documents"), metadata)
+	L.Push(lua.LBool(success))
+	return 1
+}
+
+func (s *LuaPlugin) docBatchUpsertChapters(L *lua.LState) int {
+	docID := L.CheckInt(1)
+	tbl := L.CheckTable(2)
+
+	var chapters []models.Chapter
+	tbl.ForEach(func(_, v lua.LValue) {
+		if chTable, ok := v.(*lua.LTable); ok {
+			orderStr := chTable.RawGetString("order").String()
+			order, _ := strconv.Atoi(orderStr)
+			ch := models.Chapter{
+				DocumentID: uint(docID),
+				Title:      chTable.RawGetString("title").String(),
+				URL:        chTable.RawGetString("url").String(),
+				Status:     chTable.RawGetString("status").String(),
+				Metadata:   chTable.RawGetString("metadata").String(),
+				Order:      order,
+			}
+			chapters = append(chapters, ch)
+		}
+	})
+
+	if len(chapters) == 0 {
+		L.Push(lua.LBool(false))
+		return 1
+	}
+
+	success := s.Store.BatchUpsertChapters(docID, s.Name, s.HasCapability("global_documents"), chapters)
 	L.Push(lua.LBool(success))
 	return 1
 }

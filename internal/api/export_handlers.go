@@ -31,7 +31,7 @@ func (h *API) ExportDocument(c *fiber.Ctx) error {
 
 	var doc models.Document
 	if err := db.DB.WithContext(c.UserContext()).Preload("Chapters", func(db *gorm.DB) *gorm.DB {
-		return db.Order("CAST(\"order\" AS INTEGER) ASC")
+		return db.Order("order_val ASC")
 	}).First(&doc, uint(docID)).Error; err != nil {
 		fmt.Printf("[Export] Document %d not found: %v\n", docID, err)
 		return c.Status(404).JSON(fiber.Map{"error": "Document not found"})

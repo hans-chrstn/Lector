@@ -7,6 +7,7 @@ import (
 	"github.com/user/lector/internal/db"
 	"github.com/user/lector/internal/models"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type AnalyticsTrackRequest struct {
@@ -21,38 +22,32 @@ func (h *API) TrackAnalytics(c *fiber.Ctx) error {
 	}
 
 	dateStr := time.Now().Format("2006-01-02")
-	stat := models.ReadingStat{
-		Date: dateStr,
+
+	var readSeconds, chaptersRead, documentsRead int
+	switch req.Type {
+	case "time":
+		readSeconds = req.Value
+	case "chapter":
+		chaptersRead = req.Value
+	case "document":
+		documentsRead = req.Value
 	}
 
-	err := db.DB.WithContext(c.UserContext()).Transaction(func(tx *gorm.DB) error {
-		var existing models.ReadingStat
-		if err := tx.Where("date = ?", dateStr).First(&existing).Error; err != nil {
-			if err == gorm.ErrRecordNotFound {
-				if err := tx.Create(&stat).Error; err != nil {
-					return err
-				}
-				existing = stat
-			} else {
-				return err
-			}
-		}
-
-		updates := map[string]interface{}{}
-		switch req.Type {
-		case "time":
-			updates["read_seconds"] = existing.ReadSeconds + req.Value
-		case "chapter":
-			updates["chapters_read"] = existing.ChaptersRead + req.Value
-		case "document":
-			updates["documents_read"] = existing.DocumentsRead + req.Value
-		}
-
-		if len(updates) > 0 {
-			return tx.Model(&existing).Updates(updates).Error
-		}
-		return nil
-	})
+	err := db.DB.WithContext(c.UserContext()).
+		Clauses(clause.OnConflict{
+			Columns: []clause.Column{{Name: "date"}},
+			DoUpdates: clause.Assignments(map[string]interface{}{
+				"read_seconds":   gorm.Expr("reading_stats.read_seconds + ?", readSeconds),
+				"chapters_read":  gorm.Expr("reading_stats.chapters_read + ?", chaptersRead),
+				"documents_read": gorm.Expr("reading_stats.documents_read + ?", documentsRead),
+			}),
+		}).
+		Create(&models.ReadingStat{
+			Date:           dateStr,
+			ReadSeconds:    readSeconds,
+			ChaptersRead:   chaptersRead,
+			DocumentsRead:  documentsRead,
+		}).Error
 
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": "Failed to track analytics"})

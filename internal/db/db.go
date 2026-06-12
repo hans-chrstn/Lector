@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/user/lector/internal/models"
+	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -15,49 +15,30 @@ import (
 
 var DB *gorm.DB
 
-type SchemaVersion struct {
-	Version   int       `gorm:"primaryKey" json:"version"`
-	AppliedAt time.Time `json:"applied_at"`
-}
-
-func runMigrations(db *gorm.DB) {
-	db.AutoMigrate(&SchemaVersion{})
-
-	var currentVersion int
-	db.Model(&SchemaVersion{}).Select("COALESCE(MAX(version), 0)").Scan(&currentVersion)
-
-	if currentVersion < 1 {
-		db.AutoMigrate(
-			&models.Document{},
-			&models.Chapter{},
-			&models.ReadingProgress{},
-			&models.Group{},
-			&models.CacheItem{},
-			&models.Bookmark{},
-			&models.Note{},
-			&models.Plugin{},
-			&models.LibraryPath{},
-		)
-		setupFTS(db)
-		db.Create(&SchemaVersion{Version: 1, AppliedAt: time.Now()})
-	}
-
-	if currentVersion < 2 {
-		db.AutoMigrate(&models.ReadingStat{})
-		db.Create(&SchemaVersion{Version: 2, AppliedAt: time.Now()})
-	}
-}
-
 func InitDB(path string) {
 	var err error
+
+	driver := os.Getenv("DB_DRIVER")
+	if driver == "" {
+		driver = "sqlite"
+	}
 
 	if envPath := os.Getenv("DATABASE_PATH"); envPath != "" {
 		path = envPath
 	}
 
-	dir := filepath.Dir(path)
-	if dir != "." && dir != "" {
-		os.MkdirAll(dir, 0777)
+	isMemory := strings.Contains(path, ":memory:")
+
+	if isMemory && driver == "sqlite" {
+		path = filepath.Join(os.TempDir(), "lector_test_"+time.Now().Format("20060102150405999999999")+".db")
+		isMemory = false
+	}
+
+	if driver == "sqlite" {
+		dir := filepath.Dir(path)
+		if dir != "." && dir != "" && !isMemory {
+			os.MkdirAll(dir, 0777)
+		}
 	}
 
 	newLogger := logger.New(
@@ -70,16 +51,27 @@ func InitDB(path string) {
 		},
 	)
 
-	dsn := path
-	if !strings.Contains(path, ":memory:") {
-		if !strings.Contains(path, "?") {
-			dsn = path + "?_journal_mode=WAL&_busy_timeout=5000"
-		} else {
-			dsn = path + "&_journal_mode=WAL&_busy_timeout=5000"
+	var dialector gorm.Dialector
+
+	if driver == "postgres" {
+		dsn := os.Getenv("DATABASE_URL")
+		if dsn == "" {
+			log.Fatalf("DATABASE_URL environment variable is required for postgres driver")
 		}
+		dialector = postgres.Open(dsn)
+	} else {
+		dsn := path
+		if !isMemory {
+			if !strings.Contains(path, "?") {
+				dsn = path + "?_journal_mode=WAL&_busy_timeout=5000"
+			} else {
+				dsn = path + "&_journal_mode=WAL&_busy_timeout=5000"
+			}
+		}
+		dialector = sqlite.Open(dsn)
 	}
 
-	DB, err = gorm.Open(sqlite.Open(dsn), &gorm.Config{
+	DB, err = gorm.Open(dialector, &gorm.Config{
 		Logger: newLogger,
 	})
 	if err != nil {
@@ -87,20 +79,38 @@ func InitDB(path string) {
 	}
 
 	sqlDB, _ := DB.DB()
-	sqlDB.Exec("PRAGMA journal_mode=WAL;")
-	sqlDB.Exec("PRAGMA busy_timeout=5000;")
-	sqlDB.Exec("PRAGMA synchronous=NORMAL;")
 
-	if !strings.Contains(path, ":memory:") {
+	if driver == "postgres" {
+		sqlDB.SetMaxOpenConns(100)
+		sqlDB.SetMaxIdleConns(20)
+		sqlDB.SetConnMaxLifetime(time.Hour)
+	} else if isMemory && driver == "sqlite" {
+		sqlDB.SetMaxOpenConns(1)
+		sqlDB.SetMaxIdleConns(1)
+		sqlDB.SetConnMaxLifetime(0)
+	} else {
+		sqlDB.SetMaxOpenConns(1)
+	}
+
+	RunMigrations(sqlDB, driver)
+
+	if driver == "sqlite" && !isMemory {
+		sqlDB.Exec("PRAGMA journal_mode=WAL;")
+		sqlDB.Exec("PRAGMA busy_timeout=5000;")
+		sqlDB.Exec("PRAGMA synchronous=NORMAL;")
 		os.Chmod(path, 0600)
 	}
 
-	runMigrations(DB)
+	setupFTS(DB, driver)
 
 	log.Println("Database initialized in Silent Mode")
 }
 
-func setupFTS(db *gorm.DB) {
+func setupFTS(db *gorm.DB, driver string) {
+	if driver == "postgres" {
+		return
+	}
+
 	var ftsCheck int
 	err := db.Raw("SELECT count(*) FROM sqlite_master WHERE name='document_search'").Scan(&ftsCheck).Error
 	if err == nil && ftsCheck > 0 {

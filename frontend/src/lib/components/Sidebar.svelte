@@ -52,9 +52,7 @@
 	let { plugins, currentView, currentTabId, onNavigate }: Props = $props();
 
 	let allSections = $derived.by(() => {
-		const sections: Section[] = [
-			{ id: 'workspace', label: 'Workspace' }
-		];
+		const sections: Section[] = [{ id: 'workspace', label: 'Workspace' }];
 		plugins
 			.filter((p) => p.is_loaded)
 			.forEach((p) => {

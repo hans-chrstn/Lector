@@ -24,6 +24,7 @@ COPY internal/ ./internal/
 COPY cmd/ ./cmd/
 
 RUN CGO_ENABLED=1 GOOS=linux go build -v -o lector cmd/lector/main.go
+RUN CGO_ENABLED=1 GOOS=linux go build -v -o db-migrator cmd/db-migrator/main.go
 
 FROM alpine:latest
 
@@ -36,6 +37,7 @@ WORKDIR /app
 RUN mkdir -p /app/data /app/uploads /app/exports /app/plugins
 
 COPY --from=backend-builder /app/lector .
+COPY --from=backend-builder /app/db-migrator .
 COPY --from=frontend-builder /app/build ./public
 COPY plugins/ ./plugins/
 COPY entrypoint.sh /app/entrypoint.sh

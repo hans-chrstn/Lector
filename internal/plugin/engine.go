@@ -86,13 +86,16 @@ var GlobalPlugins map[string]*LuaPlugin
 var PluginsMu sync.Mutex
 
 func NewLuaPlugin(name, path string, store interfaces.PluginDataStore) (*LuaPlugin, error) {
+	if err := ValidateManifest(path); err != nil {
+		return nil, err
+	}
+
 	L := lua.NewState(lua.Options{
 		SkipOpenLibs:        true,
 		MinimizeStackMemory: true,
 		RegistrySize:        128,
 		RegistryMaxSize:     1024,
 	})
-
 	L.SetMx(256)
 
 	for _, pair := range []struct {

@@ -256,9 +256,9 @@ func (s *LuaPlugin) Download(u, destPath, referer string, customHeaders map[stri
 		}
 	}
 
-if !allowed {
-	return false
-}
+	if !allowed {
+		return false
+	}
 
 	GlobalCadenceManager.Wait(name, 500, 1500)
 

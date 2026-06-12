@@ -58,8 +58,11 @@ func (b *EPUBBinder) Bind(doc models.Document, outputPath string) error {
 
 	if doc.CoverURL != "" {
 		coverPath := doc.CoverURL
+		isValidLocalPath := false
+
 		if strings.HasPrefix(coverPath, "/uploads/") || strings.HasPrefix(coverPath, "uploads/") {
 			coverPath = strings.TrimPrefix(coverPath, "/")
+			isValidLocalPath = true
 		} else if strings.HasPrefix(coverPath, "http") {
 			resp, err := http.Get(coverPath)
 			if err == nil && resp.StatusCode == 200 {
@@ -71,14 +74,17 @@ func (b *EPUBBinder) Bind(doc models.Document, outputPath string) error {
 					out.Close()
 					coverPath = tmpFile
 					tempFiles = append(tempFiles, tmpFile)
+					isValidLocalPath = true
 				}
 			}
 		}
 
-		if _, err := os.Stat(coverPath); err == nil {
-			internalPath, err := e.AddImage(coverPath, "cover"+filepath.Ext(coverPath))
-			if err == nil {
-				e.SetCover(internalPath, "")
+		if isValidLocalPath {
+			if _, err := os.Stat(coverPath); err == nil {
+				internalPath, err := e.AddImage(coverPath, "cover"+filepath.Ext(coverPath))
+				if err == nil {
+					e.SetCover(internalPath, "")
+				}
 			}
 		}
 	}

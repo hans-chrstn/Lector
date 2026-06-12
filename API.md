@@ -192,6 +192,10 @@ Saves chapter text content to the database.
 
 Saves chapter multimedia metadata (e.g., JSON string of image/stream URLs).
 
+### `doc.batch_upsert_chapters(doc_id: number, chapters: table)`
+
+Performs a high-performance bulk UPSERT of chapters for a document. The `chapters` table should be an array of tables, each containing `title`, `url`, `order`, `status`, and `metadata`.
+
 ### `doc.update_metadata(doc_id: number, metadata: table)`
 
 Updates document metadata. Supported fields: `title`, `author`, `synopsis`, `genres`, `status`, `cover_url`, `studio`, `type`.
@@ -225,6 +229,10 @@ Writes raw content to a file in the downloads directory. Requires `storage`.
 ## `net` Namespace
 
 Requires `network` capability. Most functions are accessible via `net.` or `app.net.`.
+
+### `net.fetch_retry(method: string, url: string, [options: table]) -> string`
+
+Performs a network request with built-in exponential backoff (retries up to 3 times, with increasing delays). Options: `body`. Returns the body or an "ERROR:" prefix. Requires `network`.
 
 ### `net.request(method: string, url: string, [options: table]) -> string`
 

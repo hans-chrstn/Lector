@@ -52,7 +52,6 @@
 	onMount(() => {
 		window.addEventListener('message', handleMessage);
 
-
 		const iframes = document.querySelectorAll('iframe');
 		iframes.forEach((iframe) => {
 			if (iframe.contentWindow) {
@@ -77,7 +76,6 @@
 			fetchSchema(true);
 		}
 	});
-
 
 	$effect(() => {
 		if (schema && !loading) {

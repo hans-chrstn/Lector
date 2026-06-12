@@ -8,6 +8,7 @@ type PluginDataStore interface {
 	UpdateDocumentMetadata(docID int, source string, global bool, updates map[string]interface{}) bool
 	UpdateChapterMetadata(chapterID int, source string, global bool, metadata string) bool
 	UpdateChapterContent(chapterID int, source string, global bool, content string) bool
+	BatchUpsertChapters(docID int, source string, global bool, chapters []models.Chapter) bool
 	GetChapters(docID int, source string, global bool) ([]models.Chapter, bool)
 	ListDocuments(source string, global bool) []models.Document
 	GetReadingProgress(docID int) (*models.ReadingProgress, bool)

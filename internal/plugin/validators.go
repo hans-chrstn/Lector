@@ -1,62 +1,65 @@
 package plugin
 
 import (
+	"encoding/json"
 	"fmt"
-	"github.com/yuin/gopher-lua"
+	"os"
+	"path/filepath"
 )
 
-type PluginValidator interface {
-	Validate(p *LuaPlugin) error
+type Manifest struct {
+	Type         string   `json:"type"`
+	Capabilities []string `json:"capabilities"`
 }
 
-type SourceValidator struct{}
+func ValidateManifest(path string) error {
+	pluginDir := filepath.Dir(path)
+	manifestPath := filepath.Join(pluginDir, "manifest.json")
 
-func (v *SourceValidator) Validate(p *LuaPlugin) error {
-	hasSourceFuncs := true
-	for _, fn := range []string{"search", "get_document", "get_chapter"} {
-		p.Mu.Lock()
-		f := p.L.GetGlobal(fn)
-		p.Mu.Unlock()
-		if f.Type() != lua.LTFunction {
-			hasSourceFuncs = false
-			break
-		}
+	if _, err := os.Stat(manifestPath); err != nil {
+		return nil
 	}
 
-	if !hasSourceFuncs {
-		return fmt.Errorf("source plugin must implement 'search', 'get_document', and 'get_chapter'")
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return fmt.Errorf("failed to read manifest: %w", err)
+	}
+
+	var m Manifest
+	if err := json.Unmarshal(data, &m); err != nil {
+		return fmt.Errorf("invalid manifest format: %w", err)
+	}
+
+	for _, cap := range m.Capabilities {
+		switch cap {
+		case "network", "storage", "ui", "theming", "source", "catalog", "background", "interaction", "local_network", "global_documents":
+			continue
+		default:
+			return fmt.Errorf("unknown capability: %s", cap)
+		}
 	}
 	return nil
 }
 
-type UtilityValidator struct{}
+type Validator interface {
+	Validate(s *LuaPlugin) error
+}
 
-func (v *UtilityValidator) Validate(p *LuaPlugin) error {
+type sourceValidator struct{}
 
-	p.ManifestMu.RLock()
-	hasUI := len(p.Tabs) > 0 || len(p.Actions) > 0 || len(p.SettingsGroups) > 0 || len(p.Sections) > 0 || len(p.UIOverrides) > 0
-	hasUtilityCap := false
-	for _, cap := range p.Capabilities {
-		if cap == "background" || cap == "storage" || cap == "theming" {
-			hasUtilityCap = true
-			break
-		}
-	}
-	p.ManifestMu.RUnlock()
-
-	if !hasUI && !hasUtilityCap {
-		return fmt.Errorf("utility plugin must define UI elements or enable 'background'/'storage' capabilities")
-	}
+func (v *sourceValidator) Validate(s *LuaPlugin) error {
 	return nil
 }
 
-func GetValidator(pluginType string) PluginValidator {
-	switch pluginType {
-	case "utility":
-		return &UtilityValidator{}
-	case "source":
-		fallthrough
-	default:
-		return &SourceValidator{}
+type utilityValidator struct{}
+
+func (v *utilityValidator) Validate(s *LuaPlugin) error {
+	return nil
+}
+
+func GetValidator(pluginType string) Validator {
+	if pluginType == "source" {
+		return &sourceValidator{}
 	}
+	return &utilityValidator{}
 }

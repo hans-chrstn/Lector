@@ -15,7 +15,7 @@ import (
 	"github.com/user/lector/internal/db"
 	"github.com/user/lector/internal/models"
 	"github.com/user/lector/internal/plugin"
-	"github.com/user/lector/internal/repository"
+
 	"github.com/user/lector/internal/services"
 )
 
@@ -67,7 +67,7 @@ func TestUploadAPI(t *testing.T) {
 	defer os.RemoveAll("uploads")
 
 	engine := &plugin.PluginEngine{
-		Store:   repository.NewPluginRepository(),
+		Store:   db.NewPluginRepository(),
 		Plugins: make(map[string]*plugin.LuaPlugin),
 	}
 	api.RegisterRoutes(app, engine)

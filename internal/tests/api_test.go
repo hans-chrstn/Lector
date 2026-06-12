@@ -2,6 +2,7 @@ package tests
 
 import (
 	"encoding/json"
+	"io"
 	"net/http/httptest"
 	"testing"
 
@@ -10,14 +11,14 @@ import (
 	"github.com/user/lector/internal/db"
 	"github.com/user/lector/internal/models"
 	"github.com/user/lector/internal/plugin"
-	"github.com/user/lector/internal/repository"
 )
 
 func TestAPIRoutes(t *testing.T) {
 	app := fiber.New()
 	db.InitDB(":memory:")
+	db.DB.Exec("DELETE FROM documents")
 	engine := &plugin.PluginEngine{
-		Store:   repository.NewPluginRepository(),
+		Store:   db.NewPluginRepository(),
 		Plugins: make(map[string]*plugin.LuaPlugin),
 	}
 	api.RegisterRoutes(app, engine)
@@ -34,7 +35,8 @@ func TestAPIRoutes(t *testing.T) {
 		req := httptest.NewRequest("GET", "/api/documents", nil)
 		resp, _ := app.Test(req)
 		if resp.StatusCode != 200 {
-			t.Errorf("Expected 200, got %d", resp.StatusCode)
+			body, _ := io.ReadAll(resp.Body)
+			t.Errorf("Expected 200, got %d, body: %s", resp.StatusCode, string(body))
 		}
 		var documents []models.Document
 		json.NewDecoder(resp.Body).Decode(&documents)

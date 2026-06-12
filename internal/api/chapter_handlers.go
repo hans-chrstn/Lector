@@ -7,6 +7,7 @@ import (
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/user/lector/internal/db"
 	"github.com/user/lector/internal/models"
+	"github.com/user/lector/internal/services"
 )
 
 func (h *API) GetChapterByID(c *fiber.Ctx) error {
@@ -19,14 +20,22 @@ func (h *API) GetChapterByID(c *fiber.Ctx) error {
 	if ch.Content == "" && (ch.Metadata == "" || ch.Metadata == "[]" || ch.Metadata == "null") {
 		var document models.Document
 		db.DB.WithContext(c.UserContext()).Find(&document, ch.DocumentID)
-		s, ok := h.Engine.Plugins[document.Source]
-		if ok {
-			res, err := s.GetChapter(ch.URL)
+		
+		if document.Source == "local" {
+			content, err := services.ExtractLocalChapter(document.URL, ch.URL, ch.Title)
 			if err == nil {
-				ch.Content = s.CleanHTML(res.Content, ch.Title)
-				ch.Metadata = res.Metadata
-				ch.Status = "done"
-				db.DB.WithContext(c.UserContext()).Save(&ch)
+				ch.Content = content
+			}
+		} else {
+			s, ok := h.Engine.Plugins[document.Source]
+			if ok {
+				res, err := s.GetChapter(ch.URL)
+				if err == nil {
+					ch.Content = s.CleanHTML(res.Content, ch.Title)
+					ch.Metadata = res.Metadata
+					ch.Status = "done"
+					db.DB.WithContext(c.UserContext()).Save(&ch)
+				}
 			}
 		}
 	}

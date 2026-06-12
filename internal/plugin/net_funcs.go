@@ -2,9 +2,39 @@ package plugin
 
 import (
 	"net/url"
+	"strings"
+	"time"
 
 	lua "github.com/yuin/gopher-lua"
 )
+
+func (s *LuaPlugin) netFetchRetry(L *lua.LState) int {
+	method := L.CheckString(1)
+	u := L.CheckString(2)
+	options := L.OptTable(3, nil)
+
+	var body string
+	if options != nil {
+		if val := options.RawGetString("body"); val != lua.LNil {
+			body = val.String()
+		}
+	}
+
+	var resp string
+	backoff := 500 * time.Millisecond
+
+	for i := 0; i < 3; i++ {
+		resp = s.Fetch(method, u, body, "", false, nil)
+		if !strings.Contains(resp, "ERROR:") {
+			break
+		}
+		time.Sleep(backoff)
+		backoff *= 2
+	}
+
+	L.Push(lua.LString(resp))
+	return 1
+}
 
 func (s *LuaPlugin) registerNetFunctions() {
 	s.L.SetGlobal("http_get", s.L.NewFunction(s.httpGet))
@@ -12,8 +42,15 @@ func (s *LuaPlugin) registerNetFunctions() {
 
 	net := s.L.NewTable()
 	s.L.SetField(net, "fetch", s.L.NewFunction(s.netFetch))
+	s.L.SetField(net, "fetch_retry", s.L.NewFunction(s.netFetchRetry))
 	s.L.SetField(net, "url_encode", s.L.NewFunction(s.urlEncode))
+	s.L.SetGlobal("url_encode", s.L.NewFunction(s.urlEncode))
 	s.L.SetField(net, "url_decode", s.L.NewFunction(func(L *lua.LState) int {
+		res, _ := url.QueryUnescape(L.CheckString(1))
+		L.Push(lua.LString(res))
+		return 1
+	}))
+	s.L.SetGlobal("url_decode", s.L.NewFunction(func(L *lua.LState) int {
 		res, _ := url.QueryUnescape(L.CheckString(1))
 		L.Push(lua.LString(res))
 		return 1

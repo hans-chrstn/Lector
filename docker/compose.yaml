@@ -7,7 +7,10 @@ services:
     ports:
       - "3000:3000"
     environment:
+      - DB_DRIVER=sqlite
       - DATABASE_PATH=/app/data/lector.db
+      # - DB_DRIVER=postgres
+      # - DATABASE_URL=postgres://user:pass@host:5432/db
       - PORT=3000
       - MAX_UPLOAD_SIZE=100
       # - CORS_ALLOW_ORIGINS=*

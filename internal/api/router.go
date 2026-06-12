@@ -5,10 +5,7 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/user/lector/internal/db"
-	"github.com/user/lector/internal/models"
 	"github.com/user/lector/internal/plugin"
-	"github.com/user/lector/internal/repository"
 	"github.com/user/lector/internal/services"
 )
 
@@ -18,9 +15,7 @@ type API struct {
 }
 
 func RegisterRoutes(app *fiber.App, engine *plugin.PluginEngine) {
-	docRepo := repository.NewRepository[models.Document](db.DB)
-	chapterRepo := repository.NewRepository[models.Chapter](db.DB)
-	docService := services.NewDocumentService(docRepo, chapterRepo)
+	docService := services.NewDocumentService()
 
 	h := &API{
 		Engine:          engine,
@@ -74,6 +69,7 @@ func RegisterRoutes(app *fiber.App, engine *plugin.PluginEngine) {
 	api.Post("/library/paths", h.AddLibraryPath)
 	api.Delete("/library/paths/:id", h.DeleteLibraryPath)
 	api.Post("/library/scan", h.ScanLibrary)
+	api.Get("/library/scan/status", h.ScanStatus)
 
 	api.Get("/chapters/:id", h.GetChapterByID)
 	api.Post("/chapters/:id/read", h.ToggleChapterRead)

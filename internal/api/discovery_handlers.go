@@ -13,8 +13,8 @@ func (h *API) Search(c *fiber.Ctx) error {
 	pluginName, query := c.Query("plugin"), c.Query("q")
 	fmt.Printf("[Search] Query: %s, Plugin: %s\n", query, pluginName)
 
-	var allResults []map[string]interface{}
-	var allErrors []string
+	allResults := make([]map[string]interface{}, 0)
+	allErrors := make([]string, 0)
 
 	if pluginName == "all" {
 		var wg sync.WaitGroup
@@ -85,7 +85,7 @@ func (h *API) Search(c *fiber.Ctx) error {
 	}
 	fmt.Printf("[Search] Plugin %s returned %d results\n", pluginName, len(res))
 
-	var results []map[string]interface{}
+	results := make([]map[string]interface{}, 0)
 	for _, item := range res {
 		results = append(results, map[string]interface{}{
 			"title":     item.Title,
@@ -131,7 +131,7 @@ func (h *API) PluginDirectory(c *fiber.Ctx) error {
 		return c.Status(500).JSON(fiber.Map{"error": fmt.Sprintf("%v", err)})
 	}
 
-	var results []map[string]interface{}
+	results := make([]map[string]interface{}, 0)
 	for _, item := range res {
 		results = append(results, map[string]interface{}{
 			"title":     item.Title,

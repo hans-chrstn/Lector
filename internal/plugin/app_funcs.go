@@ -37,6 +37,7 @@ func (s *LuaPlugin) registerAppFunctions() {
 	s.L.SetField(app, "store", store)
 	net := s.L.NewTable()
 	s.L.SetField(net, "request", s.L.NewFunction(s.netRequest))
+	s.L.SetField(net, "fetch_retry", s.L.NewFunction(s.netRequestRetry))
 	s.L.SetField(net, "set_profile", s.L.NewFunction(s.netSetProfile))
 	s.L.SetField(app, "net", net)
 
@@ -98,6 +99,54 @@ func (s *LuaPlugin) netRequest(L *lua.LState) int {
 	}
 
 	res := s.Fetch(method, u, body, referer, isAjax, headers)
+	L.Push(lua.LString(res))
+	return 1
+}
+
+func (s *LuaPlugin) netRequestRetry(L *lua.LState) int {
+	if !s.HasCapability("network") {
+		L.Push(lua.LNil)
+		L.Push(lua.LString("Capability 'network' not enabled"))
+		return 2
+	}
+	method := L.CheckString(1)
+	u := L.CheckString(2)
+	options := L.OptTable(3, L.NewTable())
+
+	body := ""
+	if b := options.RawGetString("body"); b.Type() == lua.LTString {
+		body = b.String()
+	}
+
+	referer := ""
+	if r := options.RawGetString("referer"); r.Type() == lua.LTString {
+		referer = r.String()
+	}
+
+	isAjax := false
+	if a := options.RawGetString("is_ajax"); a.Type() == lua.LTBool {
+		isAjax = bool(a.(lua.LBool))
+	}
+
+	headers := make(map[string]string)
+	if h := options.RawGetString("headers"); h.Type() == lua.LTTable {
+		tbl := h.(*lua.LTable)
+		tbl.ForEach(func(k, v lua.LValue) {
+			headers[k.String()] = v.String()
+		})
+	}
+
+	var res string
+	backoff := 500 * time.Millisecond
+	for i := 0; i < 3; i++ {
+		res = s.Fetch(method, u, body, referer, isAjax, headers)
+		if !strings.Contains(res, "ERROR:") {
+			break
+		}
+		time.Sleep(backoff)
+		backoff *= 2
+	}
+
 	L.Push(lua.LString(res))
 	return 1
 }

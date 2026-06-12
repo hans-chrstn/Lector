@@ -6,7 +6,6 @@ import (
 
 	"github.com/user/lector/internal/db"
 	"github.com/user/lector/internal/models"
-	"github.com/user/lector/internal/repository"
 	"github.com/user/lector/internal/services"
 )
 
@@ -15,9 +14,7 @@ func TestDocumentService(t *testing.T) {
 	defer os.Remove(testDB)
 	db.InitDB(testDB)
 
-	docRepo := repository.NewRepository[models.Document](db.DB)
-	chapterRepo := repository.NewRepository[models.Chapter](db.DB)
-	docService := services.NewDocumentService(docRepo, chapterRepo)
+	docService := services.NewDocumentService()
 
 	t.Run("Ensure Document - New", func(t *testing.T) {
 		doc := &models.Document{

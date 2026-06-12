@@ -18,7 +18,7 @@ import (
 	"github.com/user/lector/internal/db"
 	"github.com/user/lector/internal/models"
 	"github.com/user/lector/internal/plugin"
-	"github.com/user/lector/internal/repository"
+
 	"github.com/user/lector/internal/services"
 )
 
@@ -91,7 +91,7 @@ func main() {
 		}))
 	}
 
-	pluginStore := repository.NewPluginRepository()
+	pluginStore := db.NewPluginRepository()
 	plugins := loadPlugins(pluginStore)
 	plugin.GlobalPlugins = plugins
 

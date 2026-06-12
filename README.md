@@ -21,9 +21,28 @@ Lector is designed to be easily deployed via Docker. It runs as an unprivileged 
 | `AUTH_USER`          | Username for Basic Authentication | (None)                |
 | `AUTH_PASSWORD`      | Password for Basic Authentication | (None)                |
 | `MAX_UPLOAD_SIZE`    | Maximum upload size in MB         | `100`                 |
-| `DATABASE_PATH`      | Path to the SQLite database file  | `/app/data/lector.db` |
+| `DB_DRIVER`          | Database driver (`sqlite` or `postgres`) | `sqlite` |
+| `DATABASE_PATH`      | Path to SQLite file (SQLite only) | `/app/data/lector.db` |
+| `DATABASE_URL`       | DSN/URL (Postgres only)           | (None)                |
 | `CORS_ALLOW_ORIGINS` | Permitted origins for CORS        | (Same-origin only)    |
 | `PORT`               | Port to listen on                 | `3000`                |
+
+### PostgreSQL Support
+
+Lector supports PostgreSQL for high-concurrency environments. To use it, set `DB_DRIVER=postgres` and provide a `DATABASE_URL` (e.g., `postgres://user:pass@host:5432/db`).
+
+### Migrating from SQLite to PostgreSQL
+
+If you are already using SQLite and want to move your data to PostgreSQL, use the built-in migration tool:
+
+```bash
+docker run --rm \
+  -v lector_data:/app/data \
+  -e SQLITE_PATH=/app/data/lector.db \
+  -e DATABASE_URL=postgres://user:pass@host:5432/db \
+  -e MIGRATE_DIRECTION=sqlite2postgres \
+  lector ./db-migrator
+```
 
 ### Building and Running
 

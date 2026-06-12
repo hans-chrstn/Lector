@@ -50,7 +50,7 @@ type EPUBFixer struct {
 	Files map[string]bool
 }
 
-func NewEPUBFixer(r *zip.ReadCloser) *EPUBFixer {
+func NewEPUBFixer(r *zip.Reader) *EPUBFixer {
 	files := make(map[string]bool)
 	for _, f := range r.File {
 		files[filepath.ToSlash(f.Name)] = true
@@ -265,7 +265,6 @@ func processEPUB(path string) (*models.Document, error) {
 	}
 
 	var chapters []models.Chapter
-	fixer := NewEPUBFixer(r)
 	opfDir := filepath.Dir(opfPath)
 	order := 1
 	for _, ref := range pkg.Spine.ItemRefs {
@@ -340,17 +339,13 @@ func processEPUB(path string) (*models.Document, error) {
 				continue
 			}
 		}
-
-		fixedBody := fixer.FixChapter(body, fullHref)
-		cleanBody := sanitizer.CleanHTML(fixedBody, chTitle)
-
 		chapters = append(chapters, models.Chapter{
 			DocumentID: document.ID,
 			Title:      chTitle,
 			URL:        document.URL + "/" + fullHref,
-			Content:    cleanBody,
+			Content:    "",
 			Order:      order,
-			Status:     "done",
+			Status:     "lazy",
 		})
 		order++
 	}
@@ -382,4 +377,44 @@ func processEPUB(path string) (*models.Document, error) {
 	db.DB.CreateInBatches(chapters, 100)
 	document.Chapters = chapters
 	return &document, nil
+}
+
+func stringBetween(str, start, end string) string {
+	s := strings.Index(str, start)
+	if s == -1 {
+		return ""
+	}
+	s += len(start)
+	e := strings.Index(str[s:], end)
+	if e == -1 {
+		return ""
+	}
+	return str[s : s+e]
+}
+
+func ExtractLocalChapter(documentURL, chapterURL, chapterTitle string) (string, error) {
+	zipPath := strings.TrimPrefix(chapterURL, documentURL+"/")
+	r, err := zip.OpenReader(documentURL)
+	if err != nil {
+		return "", err
+	}
+	defer r.Close()
+
+	fixer := NewEPUBFixer(&r.Reader)
+
+	for _, f := range r.File {
+		if filepath.ToSlash(f.Name) == zipPath {
+			rc, err := f.Open()
+			if err != nil {
+				return "", err
+			}
+			bodyBytes, _ := io.ReadAll(rc)
+			rc.Close()
+
+			fixedBody := fixer.FixChapter(string(bodyBytes), zipPath)
+			cleanBody := sanitizer.CleanHTML(fixedBody, chapterTitle)
+			return cleanBody, nil
+		}
+	}
+	return "", fmt.Errorf("chapter not found in zip")
 }

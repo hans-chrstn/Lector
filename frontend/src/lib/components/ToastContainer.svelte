@@ -12,7 +12,6 @@
 <div class="toast-container">
 	{#each toast.toasts as t (t.id)}
 		<div
-
 			in:fly={{ y: 20, duration: 400 }}
 			out:fade={{ duration: 200 }}
 			class={clsx('toast', t.type)}

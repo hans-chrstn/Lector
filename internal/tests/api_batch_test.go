@@ -11,14 +11,13 @@ import (
 	"github.com/user/lector/internal/db"
 	"github.com/user/lector/internal/models"
 	"github.com/user/lector/internal/plugin"
-	"github.com/user/lector/internal/repository"
 )
 
 func TestBatchAPI(t *testing.T) {
 	app := fiber.New()
 	db.InitDB(":memory:")
 	engine := &plugin.PluginEngine{
-		Store:   repository.NewPluginRepository(),
+		Store:   db.NewPluginRepository(),
 		Plugins: make(map[string]*plugin.LuaPlugin),
 	}
 	api.RegisterRoutes(app, engine)

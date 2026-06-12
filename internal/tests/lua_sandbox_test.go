@@ -10,7 +10,6 @@ import (
 	"github.com/user/lector/internal/core/httpclient"
 	"github.com/user/lector/internal/db"
 	"github.com/user/lector/internal/plugin"
-	"github.com/user/lector/internal/repository"
 )
 
 func TestLuaEnvironment(t *testing.T) {
@@ -31,7 +30,7 @@ func TestLuaEnvironment(t *testing.T) {
 	}
 	defer os.Remove("test_env.lua")
 
-	_, err = plugin.NewLuaPlugin("test", "test_env.lua", repository.NewPluginRepository())
+	_, err = plugin.NewLuaPlugin("test", "test_env.lua", db.NewPluginRepository())
 	if err != nil {
 		t.Fatalf("Lua environment validation failed: %v", err)
 	}
@@ -63,7 +62,7 @@ func TestLuaSandboxSecurity(t *testing.T) {
 		}
 		defer os.Remove("test_sandbox.lua")
 
-		_, err = plugin.NewLuaPlugin("test", "test_sandbox.lua", repository.NewPluginRepository())
+		_, err = plugin.NewLuaPlugin("test", "test_sandbox.lua", db.NewPluginRepository())
 		if err != nil {
 			if strings.Contains(err.Error(), "is available") {
 				t.Fatalf("Security failure: dangerous module detected: %v", err)
@@ -96,7 +95,7 @@ func TestLuaFSSandboxSecurity(t *testing.T) {
 	}
 	defer os.Remove("test_fs_sandbox.lua")
 
-	_, err = plugin.NewLuaPlugin("test", "test_fs_sandbox.lua", repository.NewPluginRepository())
+	_, err = plugin.NewLuaPlugin("test", "test_fs_sandbox.lua", db.NewPluginRepository())
 	if err != nil {
 		t.Fatalf("FS sandbox security test failed: %v", err)
 	}
@@ -119,7 +118,7 @@ func TestLuaNetworkSandboxSecurity(t *testing.T) {
 		}
 		defer os.Remove("test_ssrf.lua")
 
-		_, err = plugin.NewLuaPlugin("test", "test_ssrf.lua", repository.NewPluginRepository())
+		_, err = plugin.NewLuaPlugin("test", "test_ssrf.lua", db.NewPluginRepository())
 		if err != nil {
 			t.Fatalf("SSRF dialer test failed: %v", err)
 		}
@@ -141,7 +140,7 @@ func TestLuaNetworkSandboxSecurity(t *testing.T) {
 		}
 		defer os.Remove("test_domain.lua")
 
-		_, err = plugin.NewLuaPlugin("test", "test_domain.lua", repository.NewPluginRepository())
+		_, err = plugin.NewLuaPlugin("test", "test_domain.lua", db.NewPluginRepository())
 		if err != nil {
 			t.Fatalf("Domain permissions check failed: %v", err)
 		}
@@ -180,7 +179,7 @@ func TestLuaNetworkSandboxSecurity(t *testing.T) {
 		}
 		defer os.Remove("test_headers.lua")
 
-		_, err = plugin.NewLuaPlugin("test", "test_headers.lua", repository.NewPluginRepository())
+		_, err = plugin.NewLuaPlugin("test", "test_headers.lua", db.NewPluginRepository())
 		if err != nil {
 			t.Fatalf("Custom headers test failed: %v", err)
 		}

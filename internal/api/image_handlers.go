@@ -1,18 +1,17 @@
 package api
 
 import (
-	"encoding/json"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/user/lector/internal/core/httpclient"
-	"github.com/user/lector/internal/db"
-	"github.com/user/lector/internal/models"
 	"github.com/user/lector/internal/services"
 )
 
@@ -38,59 +37,64 @@ func (h *API) ProxyImage(c *fiber.Ctx) error {
 			return c.Status(400).JSON(fiber.Map{"error": "Invalid image URL"})
 		}
 	}
-	type CachedImage struct {
-		Data        []byte `json:"data"`
-		ContentType string `json:"content_type"`
+	hashBytes := sha256.Sum256([]byte(imgURL))
+	hashStr := hex.EncodeToString(hashBytes[:])
+	cacheDir := filepath.Join("uploads", "cache", "images")
+	os.MkdirAll(cacheDir, 0755)
+
+	matches, _ := filepath.Glob(filepath.Join(cacheDir, hashStr+".*"))
+	if len(matches) > 0 {
+		c.Set("Cache-Control", "public, max-age=604800")
+		return c.SendFile(matches[0])
 	}
-	cacheKey := "img:" + imgURL
-	var cached CachedImage
-	var item models.CacheItem
-	if err := db.DB.WithContext(c.UserContext()).Where("key = ? AND expires_at > ?", cacheKey, time.Now()).First(&item).Error; err == nil {
-		if err := json.Unmarshal(item.Value, &cached); err == nil && len(cached.Data) > 0 {
-			if cached.ContentType != "" {
-				c.Set("Content-Type", cached.ContentType)
-			} else {
-				c.Set("Content-Type", "image/jpeg")
-			}
-			c.Set("Cache-Control", "public, max-age=604800")
-			return c.Send(cached.Data)
-		}
-		var oldData []byte
-		if err := json.Unmarshal(item.Value, &oldData); err == nil && len(oldData) > 0 {
-			c.Set("Content-Type", "image/jpeg")
-			c.Set("Cache-Control", "public, max-age=604800")
-			return c.Send(oldData)
-		}
-	}
+
 	req, _ := http.NewRequest("GET", imgURL, nil)
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36")
 	req.Header.Set("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
+	
 	client := httpclient.InternalClient
 	if h.IsLocalNetworkAuthorized(imgURL) {
 		client = httpclient.RelaxedClient
 	}
+	
 	resp, err := client.Do(req)
 	if err != nil {
 		fmt.Printf("[ImageProxy] Error fetching %s: %v\n", imgURL, err)
 		return c.SendStatus(204)
 	}
 	defer resp.Body.Close()
+	
 	if resp.StatusCode != 200 {
 		if resp.StatusCode != 404 {
 			fmt.Printf("[ImageProxy] Remote server returned %d for %s\n", resp.StatusCode, imgURL)
 		}
 		return c.SendStatus(204)
 	}
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": "Failed to read image"})
-	}
+
 	contentType := resp.Header.Get("Content-Type")
-	if contentType == "" || !strings.HasPrefix(contentType, "image/") {
-		contentType = "image/jpeg"
+	ext := ".jpg"
+	switch contentType {
+	case "image/png":
+		ext = ".png"
+	case "image/webp":
+		ext = ".webp"
+	case "image/gif":
+		ext = ".gif"
+	case "image/avif":
+		ext = ".avif"
+	case "image/svg+xml":
+		ext = ".svg"
 	}
-	services.SetCache(cacheKey, CachedImage{Data: data, ContentType: contentType}, 7*24*time.Hour)
-	c.Set("Content-Type", contentType)
+
+	cachedPath := filepath.Join(cacheDir, hashStr+ext)
+	out, err := os.Create(cachedPath)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to create cache file"})
+	}
+	defer out.Close()
+
+	io.Copy(out, resp.Body)
+
 	c.Set("Cache-Control", "public, max-age=604800")
-	return c.Send(data)
+	return c.SendFile(cachedPath)
 }

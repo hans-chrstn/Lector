@@ -2,6 +2,7 @@ package api
 
 import (
 	"bufio"
+	"context"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -21,22 +22,60 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+func populateChapterCounts(ctx context.Context, docs []models.Document) {
+	if len(docs) == 0 {
+		return
+	}
+	var docIDs []uint
+	for _, d := range docs {
+		docIDs = append(docIDs, d.ID)
+	}
+
+	type ChapterCount struct {
+		DocumentID uint
+		ReadCount  int
+		TotalCount int
+	}
+	var counts []ChapterCount
+	db.DB.WithContext(ctx).Model(&models.Chapter{}).
+		Select("document_id, sum(case when is_read = 1 then 1 else 0 end) as read_count, count(*) as total_count").
+		Where("document_id IN ?", docIDs).
+		Group("document_id").Find(&counts)
+
+	countMap := make(map[uint]ChapterCount)
+	for _, c := range counts {
+		countMap[c.DocumentID] = c
+	}
+	for i := range docs {
+		docs[i].ReadChapters = countMap[docs[i].ID].ReadCount
+		docs[i].TotalChapters = countMap[docs[i].ID].TotalCount
+	}
+}
+
 func (h *API) GetDocuments(c *fiber.Ctx) error {
 	showArchived := c.Query("archived") == "true"
+	limitStr := c.Query("limit")
+	offsetStr := c.Query("offset")
+
+	query := db.DB.WithContext(c.UserContext()).Where("is_in_library = ? AND is_archived = ?", true, showArchived)
+
+	if limitStr != "" {
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
+			query = query.Limit(limit)
+		}
+	}
+	if offsetStr != "" {
+		if offset, err := strconv.Atoi(offsetStr); err == nil && offset > 0 {
+			query = query.Offset(offset)
+		}
+	}
+
 	var docs []models.Document
-	err := db.DB.WithContext(c.UserContext()).Where("is_in_library = ? AND is_archived = ?", true, showArchived).Find(&docs).Error
+	err := query.Find(&docs).Error
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 	}
-	for i := range docs {
-		var readCount int64
-		db.DB.WithContext(c.UserContext()).Model(&models.Chapter{}).Where("document_id = ? AND is_read = ?", docs[i].ID, true).Count(&readCount)
-		docs[i].ReadChapters = int(readCount)
-
-		var totalCount int64
-		db.DB.WithContext(c.UserContext()).Model(&models.Chapter{}).Where("document_id = ?", docs[i].ID).Count(&totalCount)
-		docs[i].TotalChapters = int(totalCount)
-	}
+	populateChapterCounts(c.UserContext(), docs)
 	return c.JSON(docs)
 }
 
@@ -80,7 +119,7 @@ func (h *API) EnsureDocument(c *fiber.Ctx) error {
 		}
 		if err := db.DB.WithContext(c.UserContext()).Clauses(clause.OnConflict{
 			Columns:   []clause.Column{{Name: "document_id"}, {Name: "url"}},
-			DoUpdates: clause.AssignmentColumns([]string{"title", "order"}),
+			DoUpdates: clause.AssignmentColumns([]string{"title", "order_val"}),
 		}).CreateInBatches(chapters, 100).Error; err != nil {
 			fmt.Printf("[API] Error creating chapters for %s: %v\n", doc.Title, err)
 		}
@@ -112,7 +151,7 @@ func (h *API) EnsureDocument(c *fiber.Ctx) error {
 						}
 						if err := db.DB.WithContext(c.UserContext()).Clauses(clause.OnConflict{
 							Columns:   []clause.Column{{Name: "document_id"}, {Name: "url"}},
-							DoUpdates: clause.AssignmentColumns([]string{"title", "order"}),
+							DoUpdates: clause.AssignmentColumns([]string{"title", "order_val"}),
 						}).CreateInBatches(fetched.Chapters, 100).Error; err != nil {
 							fmt.Printf("[API] Error creating chapters for existing %s: %v\n", doc.Title, err)
 						}
@@ -123,7 +162,7 @@ func (h *API) EnsureDocument(c *fiber.Ctx) error {
 	}
 
 	db.DB.WithContext(c.UserContext()).Preload("Chapters", func(db *gorm.DB) *gorm.DB {
-		return db.Select("id", "document_id", "title", "url", "`order`", "is_read", "status", "metadata").Order("CAST(\"order\" AS INTEGER) ASC")
+		return db.Select("id", "document_id", "title", "url", "order_val", "is_read", "status", "metadata").Order("order_val ASC")
 	}).First(doc, doc.ID)
 
 	var readCount int64
@@ -160,7 +199,7 @@ func (h *API) RefreshDocument(c *fiber.Ctx) error {
 				}
 				if err := db.DB.WithContext(c.UserContext()).Clauses(clause.OnConflict{
 					Columns:   []clause.Column{{Name: "document_id"}, {Name: "url"}},
-					DoUpdates: clause.AssignmentColumns([]string{"title", "order"}),
+					DoUpdates: clause.AssignmentColumns([]string{"title", "order_val"}),
 				}).CreateInBatches(fetched.Chapters, 100).Error; err != nil {
 					fmt.Printf("[API] Error creating chapters for refreshed %s: %v\n", doc.Title, err)
 				}
@@ -198,7 +237,7 @@ func (h *API) BatchRefreshDocuments(c *fiber.Ctx) error {
 					}
 					db.DB.WithContext(c.UserContext()).Clauses(clause.OnConflict{
 						Columns:   []clause.Column{{Name: "document_id"}, {Name: "url"}},
-						DoUpdates: clause.AssignmentColumns([]string{"title", "order"}),
+						DoUpdates: clause.AssignmentColumns([]string{"title", "order_val"}),
 					}).CreateInBatches(fetched.Chapters, 100)
 				}
 			}
@@ -217,14 +256,22 @@ func (h *API) SearchLibrary(c *fiber.Ctx) error {
 	}
 
 	var documents []models.Document
-	err := db.DB.WithContext(c.UserContext()).Raw(`
-		SELECT d.* FROM documents d
-		JOIN document_search ds ON d.id = ds.rowid
-		WHERE document_search MATCH ?
-		ORDER BY rank`, query+"*").Scan(&documents).Error
+	
+	if db.DB.Dialector.Name() == "postgres" {
+		db.DB.WithContext(c.UserContext()).
+			Where("title ILIKE ? OR author ILIKE ? OR synopsis ILIKE ? OR genres ILIKE ?", 
+			"%"+query+"%", "%"+query+"%", "%"+query+"%", "%"+query+"%").
+			Find(&documents)
+	} else {
+		err := db.DB.WithContext(c.UserContext()).Raw(`
+			SELECT d.* FROM documents d
+			JOIN document_search ds ON d.id = ds.rowid
+			WHERE document_search MATCH ?
+			ORDER BY rank`, query+"*").Scan(&documents).Error
 
-	if err != nil {
-		db.DB.WithContext(c.UserContext()).Where("title LIKE ? OR author LIKE ? OR genres LIKE ?", "%"+query+"%", "%"+query+"%", "%"+query+"%").Find(&documents)
+		if err != nil {
+			db.DB.WithContext(c.UserContext()).Where("title LIKE ? OR author LIKE ? OR genres LIKE ?", "%"+query+"%", "%"+query+"%", "%"+query+"%").Find(&documents)
+		}
 	}
 
 	return c.JSON(documents)
@@ -238,7 +285,7 @@ func (h *API) GetDocumentByID(c *fiber.Ctx) error {
 	}
 
 	db.DB.WithContext(c.UserContext()).Preload("Chapters", func(db *gorm.DB) *gorm.DB {
-		return db.Select("id", "document_id", "title", "url", "`order`", "is_read", "status", "metadata").Order("CAST(\"order\" AS INTEGER) ASC")
+		return db.Select("id", "document_id", "title", "url", "order_val", "is_read", "status", "metadata").Order("order_val ASC")
 	}).First(doc, doc.ID)
 
 	var readCount int64
@@ -278,16 +325,7 @@ func (h *API) GetHistory(c *fiber.Ctx) error {
 		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	for i := range docs {
-		var count int64
-		db.DB.WithContext(c.UserContext()).Model(&models.Chapter{}).Where("document_id = ? AND is_read = ?", docs[i].ID, true).Count(&count)
-		docs[i].ReadChapters = int(count)
-
-		var totalCount int64
-		db.DB.WithContext(c.UserContext()).Model(&models.Chapter{}).Where("document_id = ?", docs[i].ID).Count(&totalCount)
-		docs[i].TotalChapters = int(totalCount)
-	}
-
+	populateChapterCounts(c.UserContext(), docs)
 	return c.JSON(docs)
 }
 
@@ -443,14 +481,14 @@ func (h *API) handleProxy(c *fiber.Ctx, u string, ref string) error {
 	if strings.Contains(contentType, "dash+xml") || strings.Contains(u, ".mpd") {
 		defer resp.Body.Close()
 		body, _ := io.ReadAll(resp.Body)
-		rewritten := rewriteDASHManifest(string(body), u, ref)
+		rewritten := rewriteDASHManifest(string(body), u, ref, c.BaseURL())
 		return c.Send([]byte(rewritten))
 	}
 
 	if strings.Contains(contentType, "mpegURL") || strings.Contains(u, ".m3u8") {
 		defer resp.Body.Close()
 		body, _ := io.ReadAll(resp.Body)
-		rewritten := rewriteHLSManifest(string(body), u, ref)
+		rewritten := rewriteHLSManifest(string(body), u, ref, c.BaseURL())
 		return c.Send([]byte(rewritten))
 	}
 
@@ -479,16 +517,15 @@ func isAllowedOrigin(origin string, c *fiber.Ctx) bool {
 	return host == "localhost" || host == "127.0.0.1" || host == "::1" || host == c.Hostname()
 }
 
-func rewriteDASHManifest(manifest, originalURL, referer string) string {
+func rewriteDASHManifest(manifest, originalURL, referer, baseURL string) string {
 	b64url := base64.RawURLEncoding.EncodeToString([]byte(originalURL))
 	b64ref := base64.RawURLEncoding.EncodeToString([]byte(referer))
-	proxyBase := "/api/proxy-segment/" + b64url + "/" + b64ref + "/"
-
+	proxyBase := baseURL + "/api/proxy-segment/" + b64url + "/" + b64ref + "/"
 	re := regexp.MustCompile(`(<MPD[^>]*>)`)
 	return re.ReplaceAllString(manifest, "${1}\n\t<BaseURL>"+proxyBase+"</BaseURL>")
 }
 
-func rewriteHLSManifest(manifest, originalURL, referer string) string {
+func rewriteHLSManifest(manifest, originalURL, referer, baseURL string) string {
 	base, _ := url.Parse(originalURL)
 	var result strings.Builder
 	scanner := bufio.NewScanner(strings.NewReader(manifest))
@@ -501,7 +538,7 @@ func rewriteHLSManifest(manifest, originalURL, referer string) string {
 		u, err := url.Parse(line)
 		if err == nil {
 			abs := base.ResolveReference(u).String()
-			result.WriteString("/api/proxy-stream?url=" + url.QueryEscape(abs) + "&referer=" + url.QueryEscape(referer) + "\n")
+			result.WriteString(baseURL + "/api/proxy-stream?url=" + url.QueryEscape(abs) + "&referer=" + url.QueryEscape(referer) + "\n")
 		} else {
 			result.WriteString(line + "\n")
 		}
@@ -516,16 +553,19 @@ func (h *API) GetArchiveImage(c *fiber.Ctx) error {
 		return c.Status(400).JSON(fiber.Map{"error": "Missing file parameter"})
 	}
 
-	data, contentType, err := services.GetImageFromArchive(uint(id), fileName)
-	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+	var doc models.Document
+	if err := db.DB.WithContext(c.UserContext()).First(&doc, uint(id)).Error; err != nil {
+		return c.Status(404).JSON(fiber.Map{"error": "Document not found"})
 	}
 
-	var doc models.Document
-	db.DB.WithContext(c.UserContext()).First(&doc, uint(id))
 	absPath, _ := filepath.Abs(doc.LocalPath)
 	if !services.IsPathAuthorized(absPath) {
 		return c.Status(403).JSON(fiber.Map{"error": "Security: Access denied"})
+	}
+
+	data, contentType, err := services.GetImageFromArchive(uint(id), fileName)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 	}
 
 	if contentType == "" {
