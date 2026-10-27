@@ -1,0 +1,16 @@
+.git
+.local
+.cache
+plugins
+**/node_modules
+**/dist
+**/coverage
+**/test-results
+**/playwright-report
+*.db*
+data
+uploads
+exports
+temp
+.env*
+lector

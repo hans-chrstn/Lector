@@ -1,0 +1,26 @@
+services:
+  lector:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      AUTH_USER: "${AUTH_USER:?Set AUTH_USER}"
+      AUTH_PASSWORD: "${AUTH_PASSWORD:?Set AUTH_PASSWORD}"
+      ALLOWED_HOSTS: "${ALLOWED_HOSTS:-localhost,127.0.0.1}"
+    volumes:
+      - lector_data:/app/data
+      - ../plugins:/app/plugins:ro
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,noexec,nosuid
+    mem_limit: 768m
+    pids_limit: 64
+    restart: unless-stopped
+volumes:
+  lector_data:

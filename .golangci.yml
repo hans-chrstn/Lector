@@ -1,0 +1,24 @@
+version: "2"
+run:
+  timeout: 5m
+linters:
+  default: none
+  enable:
+    - govet
+    - staticcheck
+    - ineffassign
+    - unused
+    - errcheck
+  settings:
+    errcheck:
+      exclude-functions:
+        - (io.Closer).Close
+        - (*os.File).Close
+        - (*os.Root).Close
+        - (*archive/zip.ReadCloser).Close
+        - (*database/sql.Rows).Close
+        - (*github.com/user/lector/internal/storage.Store).Close
+formatters:
+  enable:
+    - gofmt
+    - goimports
